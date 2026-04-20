@@ -120,6 +120,9 @@ MIT. See [LICENSE](./LICENSE).
 
 ## About
 
-Built by [Shruti Rajagopal](https://theliminalspace.io) · [Substack](https://liminalwoman.substack.com) · [X](https://x.com/ShrutiRajagopal)
+Built by the Liminal Space co-founding team:
+
+- **Shruti Rajagopal** (CEO, full-time) · [theliminalspace.io](https://theliminalspace.io) · [Substack](https://liminalwoman.substack.com) · [X](https://x.com/ShrutiRajagopal)
+- **Shayaun Nejad** (Co-founder, Engineering, part-time — continuing at Rubrik) · UC Berkeley · systems and security · OffSec-certified · CHI 2027 paper co-author
 
 Part of [Liminal Space](https://theliminalspace.io) — a desktop workspace for founders, operators, and creatives at agentic scale. This plugin is the CLI surface of the agent architecture; the desktop app ships separately.
