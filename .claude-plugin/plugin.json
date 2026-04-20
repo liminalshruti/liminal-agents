@@ -1,0 +1,26 @@
+{
+  "name": "liminal-agents",
+  "description": "Three-agent deliberation for psychological state. Architect, Witness, and Contrarian read your state, disagree by design, and the correction becomes data. Built for Cerebral Valley x Anthropic Built with Opus 4.7 hackathon.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Shruti Rajagopal",
+    "url": "https://theliminalspace.io"
+  },
+  "homepage": "https://github.com/liminal-space-io/liminal-agents",
+  "repository": "https://github.com/liminal-space-io/liminal-agents",
+  "license": "MIT",
+  "keywords": [
+    "multi-agent",
+    "deliberation",
+    "correction-loop",
+    "bounded-agents",
+    "cerebral-valley",
+    "opus-4-7"
+  ],
+  "userConfig": {
+    "anthropic_api_key": {
+      "description": "Your Anthropic API key (starts with sk-). Only required if ANTHROPIC_API_KEY is not set in your shell environment.",
+      "sensitive": true
+    }
+  }
+}
