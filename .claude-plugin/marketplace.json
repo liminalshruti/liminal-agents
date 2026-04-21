@@ -1,0 +1,25 @@
+{
+  "name": "liminal-agents",
+  "owner": {
+    "name": "Shruti Rajagopal",
+    "url": "https://theliminalspace.io"
+  },
+  "plugins": [
+    {
+      "name": "liminal-agents",
+      "source": ".",
+      "description": "Three-agent deliberation for psychological state. Architect, Witness, and Contrarian read your state, disagree by design, and the correction becomes data.",
+      "version": "0.1.0",
+      "category": "agents",
+      "keywords": [
+        "multi-agent",
+        "deliberation",
+        "correction-loop",
+        "bounded-agents",
+        "opus-4-7"
+      ],
+      "license": "MIT",
+      "homepage": "https://github.com/liminalshruti/liminal-agents"
+    }
+  ]
+}

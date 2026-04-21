@@ -23,12 +23,42 @@ The correction loop doesn't converge. Better AI deepens disagreements instead of
 
 ## Install
 
+### As a Claude Code plugin
+
+Inside Claude Code:
+
+```
+/plugin marketplace add liminalshruti/liminal-agents
+/plugin install liminal-agents@liminal-agents
+```
+
+Claude Code clones the repo under `~/.claude/plugins/`. Install the Node dependencies once:
+
+```bash
+cd ~/.claude/plugins/marketplaces/liminal-agents
+npm install
+```
+
+Then set your API key in the shell that launches Claude Code:
+
+```bash
+export ANTHROPIC_API_KEY=sk-...
+```
+
+### From a local clone (for hacking)
+
 ```bash
 git clone https://github.com/liminalshruti/liminal-agents.git
 cd liminal-agents
 npm install
 export ANTHROPIC_API_KEY=sk-...
-claude --plugin-dir .
+```
+
+Then from inside Claude Code, add the local path as a marketplace:
+
+```
+/plugin marketplace add /absolute/path/to/liminal-agents
+/plugin install liminal-agents@liminal-agents
 ```
 
 ## Use
@@ -58,7 +88,8 @@ The plugin will:
 ```
 liminal-agents/
 ├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest
+│   ├── plugin.json              # Plugin manifest
+│   └── marketplace.json         # Marketplace entry (single-plugin repo)
 ├── skills/
 │   └── check/
 │       ├── SKILL.md             # /check skill definition
