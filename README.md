@@ -4,6 +4,15 @@
 
 A Claude Code plugin built for the **Cerebral Valley × Anthropic "Built with Opus 4.7" hackathon** (Apr 21–28, 2026). Ships a `/check` command that runs bounded multi-agent deliberation on the user's inner state.
 
+## Scope
+
+**This is a hackathon-week prototype demonstrating one architectural idea — bounded agent refusal as the basis for a correction-stream data model.** It is *not* the Liminal Space production system. It runs locally as a Claude Code plugin, stores data in a local SQLite file, and is shipped under MIT license to make the architecture inspectable.
+
+The production product (a desktop workspace for founders, operators, and creatives at agentic scale) ships from a separate, private codebase. This plugin is the publishable CLI surface of one substrate idea inside that larger system.
+
+**What you can read this repo as:** an inspectable demonstration of bounded multi-agent deliberation + a correction-stream data model in ~500 lines.
+**What you should not read this repo as:** the production product, a customer-facing tool, or a commitment about the final shape of any feature.
+
 ## The thesis
 
 Most AI products succeed when users accept the output. Liminal Agents succeeds when users push back.
@@ -15,7 +24,7 @@ The correction loop doesn't converge. Better AI deepens disagreements instead of
 ## Install
 
 ```bash
-git clone https://github.com/liminal-space-io/liminal-agents.git
+git clone https://github.com/liminalshruti/liminal-agents.git
 cd liminal-agents
 npm install
 export ANTHROPIC_API_KEY=sk-...
@@ -120,6 +129,9 @@ MIT. See [LICENSE](./LICENSE).
 
 ## About
 
-Built by [Shruti Rajagopal](https://theliminalspace.io) · [Substack](https://liminalwoman.substack.com) · [X](https://x.com/ShrutiRajagopal)
+Built by the Liminal Space co-founding team:
+
+- **Shruti Rajagopal** (CEO, full-time) · [theliminalspace.io](https://theliminalspace.io) · [Substack](https://liminalwoman.substack.com) · [X](https://x.com/ShrutiRajagopal)
+- **Shayaun Nejad** (Co-founder, Engineering, part-time — continuing at Rubrik) · UC Berkeley · systems and security · OffSec-certified · CHI 2027 paper co-author
 
 Part of [Liminal Space](https://theliminalspace.io) — a desktop workspace for founders, operators, and creatives at agentic scale. This plugin is the CLI surface of the agent architecture; the desktop app ships separately.
