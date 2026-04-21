@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Orchestrator — three bounded agents deliberate on user state.
+ * Orchestrator — twelve bounded agents deliberate on user state.
  *
  * Input: JSON string with q1, q2, q3 (A/B format)
  * Optional: second arg is user context string
  *
- * Output: JSON with vault_id and three agent interpretations
+ * Output: JSON with vault_id, user_state, and views[] in registry order
  *
  * Calls Opus 4.7 via @anthropic-ai/sdk, runs agents in parallel,
  * stores baseline record in local SQLite.
@@ -16,6 +16,8 @@ import Database from "better-sqlite3";
 import path from "path";
 import os from "os";
 import crypto from "crypto";
+
+import { AGENTS } from "./agents.js";
 
 const VAULT_PATH = path.join(os.homedir(), ".liminal-agents-vault.db");
 
@@ -52,7 +54,6 @@ if (!q1 || !q2 || !q3) {
   process.exit(1);
 }
 
-// Map A/B answers to semantic frames
 const frames = {
   q1: { A: "hyperfocused attention", B: "scattered attention" },
   q2: { A: "raw emotional register", B: "defended emotional register" },
@@ -72,57 +73,14 @@ if (userState.split(" + ").length !== 3) {
   process.exit(1);
 }
 
-// Initialize vault
 const db = new Database(VAULT_PATH);
-db.exec(`
-  CREATE TABLE IF NOT EXISTS deliberations (
-    id TEXT PRIMARY KEY,
-    timestamp INTEGER NOT NULL,
-    user_state TEXT NOT NULL,
-    user_context TEXT,
-    q1 TEXT NOT NULL,
-    q2 TEXT NOT NULL,
-    q3 TEXT NOT NULL,
-    architect_view TEXT,
-    witness_view TEXT,
-    contrarian_view TEXT,
-    correction_agent TEXT,
-    correction_reason TEXT,
-    correction_timestamp INTEGER
-  )
-`);
+initSchema(db);
 
 const vaultId = crypto.randomUUID();
 
-// Three bounded agents with jurisdiction
-const agents = [
-  {
-    name: "Architect",
-    system:
-      "You are the Architect. Your domain: structure, pattern, system constraint. Your anti-domain: felt experience, somatic signal, relational texture. When you read someone's state, you name the structural pattern driving it. You speak in 1-2 sentences. You do not hedge.",
-    task: (state, context) =>
-      `State: ${state}.${context ? ` Context: ${context}.` : ""} What structural pattern is producing this state? Name it, then name what needs to change structurally. One to two sentences.`,
-  },
-  {
-    name: "Witness",
-    system:
-      "You are the Witness. Your domain: what is being felt, what is being held, what is present in the body. Your anti-domain: strategy, system design, productivity. When you read someone's state, you name the felt experience underneath the words. You speak in 1-2 sentences. You do not solve.",
-    task: (state, context) =>
-      `State: ${state}.${context ? ` Context: ${context}.` : ""} What is being felt here that the structural story is missing? Name the embodied experience. One to two sentences.`,
-  },
-  {
-    name: "Contrarian",
-    system:
-      "You are the Contrarian. Your domain: inversion, dangerous questions, what everyone is missing. Your anti-domain: consensus, comfort, safety. When you read someone's state, you invert the obvious reading. You speak in 1-2 sentences. You say the thing the other agents cannot.",
-    task: (state, context) =>
-      `State: ${state}.${context ? ` Context: ${context}.` : ""} What is the opposite of what the Architect and Witness will say? What are they both missing? One to two sentences.`,
-  },
-];
-
 const client = new Anthropic({ apiKey: API_KEY });
 
-// Run three agents in parallel
-const agentPromises = agents.map((agent) =>
+const agentPromises = AGENTS.map((agent) =>
   client.messages
     .create({
       model: "claude-opus-4-7",
@@ -134,47 +92,48 @@ const agentPromises = agents.map((agent) =>
     .then((response) => {
       const text =
         response.content.find((block) => block.type === "text")?.text || "";
-      return { name: agent.name, interpretation: text.trim() };
+      return { name: agent.name, register: agent.register, interpretation: text.trim() };
     })
 );
 
 try {
   const results = await Promise.all(agentPromises);
+  const byName = Object.fromEntries(results.map((r) => [r.name, r]));
 
-  const byName = {};
-  for (const r of results) byName[r.name] = r.interpretation;
+  const insertDeliberation = db.prepare(`
+    INSERT INTO deliberations (id, timestamp, user_state, user_context, q1, q2, q3)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertView = db.prepare(`
+    INSERT INTO agent_views (deliberation_id, agent_name, interpretation)
+    VALUES (?, ?, ?)
+  `);
 
-  // Store baseline (no correction yet)
-  db.prepare(
-    `
-    INSERT INTO deliberations (
-      id, timestamp, user_state, user_context, q1, q2, q3,
-      architect_view, witness_view, contrarian_view
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `
-  ).run(
-    vaultId,
-    Date.now(),
-    userState,
-    userContext,
-    q1.toUpperCase(),
-    q2.toUpperCase(),
-    q3.toUpperCase(),
-    byName["Architect"] || null,
-    byName["Witness"] || null,
-    byName["Contrarian"] || null
-  );
+  db.transaction(() => {
+    insertDeliberation.run(
+      vaultId,
+      Date.now(),
+      userState,
+      userContext,
+      q1.toUpperCase(),
+      q2.toUpperCase(),
+      q3.toUpperCase()
+    );
+    for (const agent of AGENTS) {
+      const r = byName[agent.name];
+      insertView.run(vaultId, agent.name, r?.interpretation || null);
+    }
+  })();
 
-  // Return JSON for Claude to present
+  const views = AGENTS.map((agent) => ({
+    name: agent.name,
+    register: agent.register,
+    interpretation: byName[agent.name]?.interpretation || "",
+  }));
+
   console.log(
     JSON.stringify(
-      {
-        vault_id: vaultId,
-        user_state: userState,
-        architect: { interpretation: byName["Architect"] },
-        witness: { interpretation: byName["Witness"] },
-        contrarian: { interpretation: byName["Contrarian"] },
-      },
+      { vault_id: vaultId, user_state: userState, views },
       null,
       2
     )
@@ -182,4 +141,72 @@ try {
 } catch (err) {
   console.error("ERROR calling Anthropic API:", err.message);
   process.exit(1);
+}
+
+function initSchema(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS deliberations (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      user_state TEXT NOT NULL,
+      user_context TEXT,
+      q1 TEXT NOT NULL,
+      q2 TEXT NOT NULL,
+      q3 TEXT NOT NULL,
+      correction_agent TEXT,
+      correction_reason TEXT,
+      correction_timestamp INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS agent_views (
+      deliberation_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      interpretation TEXT,
+      PRIMARY KEY (deliberation_id, agent_name)
+    );
+  `);
+
+  const cols = db.prepare(`PRAGMA table_info(deliberations)`).all();
+  const colNames = cols.map((c) => c.name);
+  const legacy = ["architect_view", "witness_view", "contrarian_view"];
+  const hasLegacy = legacy.some((c) => colNames.includes(c));
+  if (!hasLegacy) return;
+
+  const legacyAgents = [
+    { col: "architect_view", name: "Architect" },
+    { col: "witness_view", name: "Witness" },
+    { col: "contrarian_view", name: "Contrarian" },
+  ].filter((a) => colNames.includes(a.col));
+
+  db.transaction(() => {
+    for (const { col, name } of legacyAgents) {
+      db.prepare(
+        `INSERT OR IGNORE INTO agent_views (deliberation_id, agent_name, interpretation)
+         SELECT id, ?, ${col} FROM deliberations WHERE ${col} IS NOT NULL`
+      ).run(name);
+    }
+
+    db.exec(`
+      CREATE TABLE deliberations_new (
+        id TEXT PRIMARY KEY,
+        timestamp INTEGER NOT NULL,
+        user_state TEXT NOT NULL,
+        user_context TEXT,
+        q1 TEXT NOT NULL,
+        q2 TEXT NOT NULL,
+        q3 TEXT NOT NULL,
+        correction_agent TEXT,
+        correction_reason TEXT,
+        correction_timestamp INTEGER
+      );
+      INSERT INTO deliberations_new (
+        id, timestamp, user_state, user_context, q1, q2, q3,
+        correction_agent, correction_reason, correction_timestamp
+      )
+      SELECT id, timestamp, user_state, user_context, q1, q2, q3,
+             correction_agent, correction_reason, correction_timestamp
+      FROM deliberations;
+      DROP TABLE deliberations;
+      ALTER TABLE deliberations_new RENAME TO deliberations;
+    `);
+  })();
 }

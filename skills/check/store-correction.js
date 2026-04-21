@@ -2,7 +2,7 @@
 /**
  * Store the user's correction to a prior deliberation.
  *
- * Input: vault_id, agent_name (Architect | Witness | Contrarian), reason string
+ * Input: vault_id, agent_name (one of the twelve), reason string
  * Updates the SQLite row with correction_agent, correction_reason, correction_timestamp.
  *
  * The correction is the product. This script is what makes the vault accumulate
@@ -12,6 +12,8 @@
 import Database from "better-sqlite3";
 import path from "path";
 import os from "os";
+
+import { AGENT_NAMES } from "./agents.js";
 
 const VAULT_PATH = path.join(os.homedir(), ".liminal-agents-vault.db");
 
@@ -26,10 +28,9 @@ if (!vaultId || !agent || !reason) {
   process.exit(1);
 }
 
-const validAgents = ["Architect", "Witness", "Contrarian"];
-if (!validAgents.includes(agent)) {
+if (!AGENT_NAMES.includes(agent)) {
   console.error(
-    `ERROR: agent must be one of ${validAgents.join(", ")}. Got: ${agent}`
+    `ERROR: agent must be one of ${AGENT_NAMES.join(", ")}. Got: ${agent}`
   );
   process.exit(1);
 }

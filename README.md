@@ -1,6 +1,6 @@
 # Liminal Agents
 
-> Three agents read your psychological state. They disagree. Your correction becomes data.
+> Twelve agents read your psychological state. They disagree. Your correction becomes data.
 
 A Claude Code plugin built for the **Cerebral Valley × Anthropic "Built with Opus 4.7" hackathon** (Apr 21–28, 2026). Ships a `/check` command that runs bounded multi-agent deliberation on the user's inner state.
 
@@ -17,7 +17,7 @@ The production product (a desktop workspace for founders, operators, and creativ
 
 Most AI products succeed when users accept the output. Liminal Agents succeeds when users push back.
 
-Three agents with bounded psychological jurisdiction — **Architect**, **Witness**, **Contrarian** — read the same state and produce different interpretations. The user's correction of whichever one got it wrong becomes a novel data category: not preference signal like RLHF, but the semantic delta between "what the model said about me" and "what I experience."
+Twelve agents with bounded psychological jurisdiction — organised across **Structural**, **Somatic**, **Temporal**, and **Symbolic** registers — read the same state and produce different interpretations. The user's correction of whichever one got it wrong becomes a novel data category: not preference signal like RLHF, but the semantic delta between "what the model said about me" and "what I experience."
 
 The correction loop doesn't converge. Better AI deepens disagreements instead of eliminating them.
 
@@ -48,9 +48,9 @@ Or with optional context:
 The plugin will:
 
 1. Ask three forced-choice questions (attention / emotional register / time horizon)
-2. Run three agents in parallel against your state
-3. Surface their disagreement
-4. Prompt you for which agent was wrong and why
+2. Run twelve agents in parallel against your state
+3. Surface their disagreement as a register-grouped council
+4. Prompt you for which of the twelve was wrong and why
 5. Store the correction in a local SQLite vault at `~/.liminal-agents-vault.db`
 
 ## Architecture
@@ -62,7 +62,8 @@ liminal-agents/
 ├── skills/
 │   └── check/
 │       ├── SKILL.md             # /check skill definition
-│       ├── orchestrator.js      # Runs 3 agents via Opus 4.7
+│       ├── agents.js            # Twelve-agent registry (single source of truth)
+│       ├── orchestrator.js      # Runs 12 agents via Opus 4.7
 │       └── store-correction.js  # Stores user correction
 ├── package.json
 └── README.md
@@ -70,11 +71,27 @@ liminal-agents/
 
 ### Bounded agents
 
-Each agent has a **domain** and an **anti-domain** — topics they must engage with and topics they must refuse. Refusal is an output, not an error.
+Each agent has a **domain** and an **anti-domain** — topics they must engage with and topics they must refuse. Refusal is an output, not an error. The twelve agents are grouped into four registers.
 
+**Structural**
 - **Architect** — structural pattern, system constraint. Anti-domain: felt experience.
-- **Witness** — embodied signal, what is being held. Anti-domain: strategy.
-- **Contrarian** — inversion, dangerous questions. Anti-domain: consensus.
+- **Strategist** — next move, consequence chain. Anti-domain: present-moment sensing.
+- **Economist** — tradeoffs, opportunity cost. Anti-domain: sentiment.
+
+**Somatic**
+- **Witness** — felt experience, what is being held. Anti-domain: strategy.
+- **Physician** — nervous-system load, capacity. Anti-domain: meaning-making.
+- **Child** — pre-strategic want. Anti-domain: duty.
+
+**Temporal**
+- **Historian** — recurrence across the user's past. Anti-domain: novelty bias.
+- **Cartographer** — life-stage terrain. Anti-domain: the immediate moment.
+- **Elder** — the long view at eighty. Anti-domain: urgency.
+
+**Symbolic**
+- **Contrarian** — inversion. Anti-domain: consensus.
+- **Mystic** — symbolic register, non-literal read. Anti-domain: operationalisation.
+- **Betrayer** — what is already being outgrown. Anti-domain: continuity.
 
 ### Vault schema
 
@@ -85,16 +102,20 @@ CREATE TABLE deliberations (
   user_state TEXT,
   user_context TEXT,
   q1 TEXT, q2 TEXT, q3 TEXT,
-  architect_view TEXT,
-  witness_view TEXT,
-  contrarian_view TEXT,
   correction_agent TEXT,
   correction_reason TEXT,
   correction_timestamp INTEGER
 );
+
+CREATE TABLE agent_views (
+  deliberation_id TEXT,
+  agent_name TEXT,
+  interpretation TEXT,
+  PRIMARY KEY (deliberation_id, agent_name)
+);
 ```
 
-The baseline is stored immediately. The correction is stored when the user responds. The delta is the product.
+Agent count is data, not schema — twelve rows per deliberation, one per agent. The baseline is stored immediately. The correction is stored when the user responds. The delta is the product.
 
 ## Testing
 
@@ -115,7 +136,7 @@ npm run vault:show
 Day-by-day build log:
 
 - **Apr 21 (Mon) — Scaffold shipped.** Plugin manifest, SKILL.md, orchestrator, correction store, vault schema.
-- **Apr 22 (Tue)** — Forced-choice flow polish; question sequencing.
+- **Apr 22 (Tue)** — Forced-choice flow polish; question sequencing; registry expanded to twelve bounded agents across four registers.
 - **Apr 23 (Wed)** — Agent prompt iteration on real state inputs.
 - **Apr 24 (Thu)** — Deliberation logic: agents see each other's reads, produce disagreement notes.
 - **Apr 25 (Fri)** — Correction UX + vault query utilities.

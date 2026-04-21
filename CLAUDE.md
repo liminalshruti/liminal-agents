@@ -22,20 +22,21 @@ When working here, optimize for:
 
 - **Runtime:** Claude Code plugin (`.claude-plugin/plugin.json` manifest)
 - **Language:** JavaScript (Node 18+)
-- **Storage:** Local SQLite at `~/.liminal-agents-vault.db`
+- **Storage:** Local SQLite at `~/.liminal-agents-vault.db` — normalised deliberations + agent_views
+- **Agent registry:** `skills/check/agents.js` — single source of truth for the twelve agents and their register grouping
 - **AI:** Anthropic SDK calling Opus 4.7
 
 ## Agent guidelines for THIS code
 
 1. **Don't add new dependencies.** Hackathon code stays small — current deps are intentional. If you genuinely need a new dep, justify in the commit message.
 2. **Match existing style.** No type system (plain JS), small files, no class hierarchies. Read `skills/check/orchestrator.js` for the pattern.
-3. **Keep the three agents bounded.** Architect / Witness / Contrarian have explicit anti-domains. Don't let them blur into general-purpose agents.
-4. **Vault schema is locked.** Don't migrate the SQLite schema mid-hackathon — judges may inspect existing data.
+3. **Keep each agent bounded.** Every entry in `skills/check/agents.js` declares a domain and an anti-domain. Adding or editing an agent is a one-file change to the registry; don't scatter agent definitions across other files, and don't let an agent's domain blur into its neighbours in the same register.
+4. **Vault schema is normalised** (`deliberations` + `agent_views`, keyed by `(deliberation_id, agent_name)`). Agent count is data, not schema. If you must change schema, write an idempotent migration inside `orchestrator.js` (there is already one for the legacy three-column shape).
 5. **No emojis in commits, code, or copy.** (Per global Liminal Space convention.)
 
 ## Liminal Space context
 
-- Brand voice: short declaratives, no hedging. "Three agents read your state. They disagree." not "Three intelligent agents collaboratively interpret..."
+- Brand voice: short declaratives, no hedging. "Twelve agents read your state. They disagree." not "Twelve intelligent agents collaboratively interpret..."
 - Banned words: transformation, journey, companion, unlock, manifest, healing, optimize, breakthrough, flourishing, wellness, emotional intelligence, empathic. (Enforced by `~/.claude/hooks/banned-words.sh`.)
 - Founder bio hard stops: Shruti is NOT Stanford GSB, NOT SPC fellow. UC Berkeley, ex-PM Asana/Cloudflare/Robinhood/Ancestry.
 
