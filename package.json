@@ -6,10 +6,10 @@
   "private": true,
   "license": "MIT",
   "author": "Shruti Rajagopal <shruti@theliminalspace.io>",
-  "homepage": "https://github.com/liminal-space-io/liminal-agents",
+  "homepage": "https://github.com/liminalshruti/liminal-agents",
   "repository": {
     "type": "git",
-    "url": "https://github.com/liminal-space-io/liminal-agents.git"
+    "url": "https://github.com/liminalshruti/liminal-agents.git"
   },
   "scripts": {
     "test:orchestrator": "node skills/check/orchestrator.js '{\"q1\":\"A\",\"q2\":\"B\",\"q3\":\"A\"}' 'test run'",

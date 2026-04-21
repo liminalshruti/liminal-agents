@@ -15,7 +15,7 @@ The correction loop doesn't converge. Better AI deepens disagreements instead of
 ## Install
 
 ```bash
-git clone https://github.com/liminal-space-io/liminal-agents.git
+git clone https://github.com/liminalshruti/liminal-agents.git
 cd liminal-agents
 npm install
 export ANTHROPIC_API_KEY=sk-...
