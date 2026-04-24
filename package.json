@@ -19,7 +19,7 @@
     "setup": "node scripts/setup.js",
     "daemon:install": "bash scripts/install-daemon.sh",
     "daemon:uninstall": "bash scripts/uninstall-daemon.sh",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "test:orchestrator": "node --test test/orchestrator.test.js",
     "test:ingest": "node --test test/daemon-ingest.test.js",
     "test:surfacing": "node --test test/surfacing-flow.test.js",
