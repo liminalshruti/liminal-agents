@@ -1,25 +1,62 @@
 # Liminal Agents
 
-> Three agents read your psychological state. They disagree. Your correction becomes data.
+> A CLI surface on the Liminal substrate. Three agents read your state. They disagree. Your correction becomes data.
 
-A Claude Code plugin built for the **Cerebral Valley × Anthropic "Built with Opus 4.7" hackathon** (Apr 21–28, 2026). Ships a `/check` command that runs bounded multi-agent deliberation on the user's inner state.
+A Claude Code plugin built for the **Cerebral Valley × Anthropic "Built with Opus 4.7" hackathon** (Apr 21–28, 2026). It is the publishable edge of one architectural idea: a background substrate that ingests local signals, bounded agents that deliberate over them, and a correction stream that never converges.
 
 ## Scope
 
-**This is a hackathon-week prototype demonstrating one architectural idea — bounded agent refusal as the basis for a correction-stream data model.** It is *not* the Liminal Space production system. It runs locally as a Claude Code plugin, stores data in a local SQLite file, and is shipped under MIT license to make the architecture inspectable.
+**This is a hackathon-week prototype.** It is not the Liminal Space production system. It runs locally, writes to a SQLite vault under `~/Library/Application Support/Liminal/`, and is MIT-licensed so the architecture is inspectable.
 
-The production product (a desktop workspace for founders, operators, and creatives at agentic scale) ships from a separate, private codebase. This plugin is the publishable CLI surface of one substrate idea inside that larger system.
+The production product (a desktop workspace for founders, operators, and creatives at agentic scale) ships from a separate, private codebase. This repo is one substrate idea reduced to the smallest thing that demonstrates it.
 
-**What you can read this repo as:** an inspectable demonstration of bounded multi-agent deliberation + a correction-stream data model in ~500 lines.
-**What you should not read this repo as:** the production product, a customer-facing tool, or a commitment about the final shape of any feature.
-
-## The thesis
+## Thesis
 
 Most AI products succeed when users accept the output. Liminal Agents succeeds when users push back.
 
-Three agents with bounded psychological jurisdiction — **Architect**, **Witness**, **Contrarian** — read the same state and produce different interpretations. The user's correction of whichever one got it wrong becomes a novel data category: not preference signal like RLHF, but the semantic delta between "what the model said about me" and "what I experience."
+Three agents with bounded jurisdiction — **Architect**, **Witness**, **Contrarian** — read the same signal and produce different interpretations. The user's correction becomes a new data category: the semantic delta between what the model said and what the user experiences.
 
-The correction loop doesn't converge. Better AI deepens disagreements instead of eliminating them.
+The correction loop does not converge. Agents do not adapt to prior corrections. The record is the moat, not the agents.
+
+## Architecture
+
+```
+~/Library/Application Support/Liminal/
+  vault.db                  SQLite (signal_events, deliberations, corrections, surfacing_events)
+  integrations.json         per-source toggles
+  integrations/<source>/    per-source cache + cursor
+  schemas/                  JSON Schema files copied on init
+  daemon.log                pino-formatted log
+
+~/Library/LaunchAgents/
+  io.liminal.substrate.plist   launchd user agent for the daemon
+```
+
+### Four tables, one correction schema
+
+- **signal_events** — every observed signal (register: inner | operational)
+- **deliberations** — one three-agent read, triggered by /check or /close
+- **corrections** — one canonical-tagged delta per wrong reading
+- **surfacing_events** — daemon-initiated prompts (close, stub: open-loop, stuck, etc.)
+
+Every row carries `schema_version` and `vault_origin` (`native` or `legacy-import`).
+
+### Canonical correction tags
+
+```
+wrong_frame               wrong_intensity             wrong_theory
+right_but_useless         right_but_already_known     too_generic
+missed_compensation       assumes_facts_not_in_evidence
+off_by_layer
+```
+
+### Bounded agents
+
+Each agent has a domain and an anti-domain. Refusal is an output, not an error. System prompts are hardcoded in `lib/agents/*.js` and never reference user history.
+
+- **Architect** — structure, pattern, system constraint. Anti-domain: felt experience.
+- **Witness** — embodied signal, what is being held. Anti-domain: strategy.
+- **Contrarian** — inversion, dangerous questions. Anti-domain: consensus.
 
 ## Install
 
@@ -28,100 +65,84 @@ git clone https://github.com/liminalshruti/liminal-agents.git
 cd liminal-agents
 npm install
 export ANTHROPIC_API_KEY=sk-...
+npm run setup
+npm run daemon:install      # macOS only; registers io.liminal.substrate
 claude --plugin-dir .
 ```
 
+`npm run setup` is idempotent. It creates the vault directory, writes default `integrations.json` if absent, and imports `~/.liminal-agents-vault.db` into the new substrate tagged `vault_origin='legacy-import'` on first run.
+
 ## Use
 
-In Claude Code:
+### /check — forced-choice snapshot
 
 ```
 /liminal-agents:check
 ```
 
-Or with optional context:
+Three binary questions, three bounded reads, one correction.
+
+### /close — end-of-day synthesis
 
 ```
-/liminal-agents:check I've been pushing hard on a launch this week
+/liminal-agents:close
 ```
 
-The plugin will:
-
-1. Ask three forced-choice questions (attention / emotional register / time horizon)
-2. Run three agents in parallel against your state
-3. Surface their disagreement
-4. Prompt you for which agent was wrong and why
-5. Store the correction in a local SQLite vault at `~/.liminal-agents-vault.db`
-
-## Architecture
+Or from the daemon notification:
 
 ```
-liminal-agents/
-├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest
-├── skills/
-│   └── check/
-│       ├── SKILL.md             # /check skill definition
-│       ├── orchestrator.js      # Runs 3 agents via Opus 4.7
-│       └── store-correction.js  # Stores user correction
-├── package.json
-└── README.md
+/liminal-agents:close --surfacing-id=<uuid>
 ```
 
-### Bounded agents
+Opus 4.7 synthesizes today's signals into one paragraph and up to three threads; the agents read the synthesis; you correct one.
 
-Each agent has a **domain** and an **anti-domain** — topics they must engage with and topics they must refuse. Refusal is an output, not an error.
+### /history — read-only record
 
-- **Architect** — structural pattern, system constraint. Anti-domain: felt experience.
-- **Witness** — embodied signal, what is being held. Anti-domain: strategy.
-- **Contrarian** — inversion, dangerous questions. Anti-domain: consensus.
-
-### Vault schema
-
-```sql
-CREATE TABLE deliberations (
-  id TEXT PRIMARY KEY,
-  timestamp INTEGER,
-  user_state TEXT,
-  user_context TEXT,
-  q1 TEXT, q2 TEXT, q3 TEXT,
-  architect_view TEXT,
-  witness_view TEXT,
-  contrarian_view TEXT,
-  correction_agent TEXT,
-  correction_reason TEXT,
-  correction_timestamp INTEGER
-);
+```
+/liminal-agents:history
+/liminal-agents:history --since-days=30
 ```
 
-The baseline is stored immediately. The correction is stored when the user responds. The delta is the product.
+Landed-vs-corrected per agent, broken down by canonical correction tag.
+
+### Daemon
+
+The daemon polls every 5 minutes (override with `LIMINAL_POLL_SEC`). Sources in this release:
+
+- **claude-code** — walks `~/.claude/projects/**/*.jsonl` for user messages (register: inner)
+- **git** — scans configured repo paths for new commits (register: operational)
+
+Not yet implemented, wired as stubs: `granola`, `calendar`, `knowledgeC`, `imessage`, `obsidian`. Enabling them in `integrations.json` logs a noop until the reader ships.
+
+Thread detection runs each tick via Haiku 4.5, grouping untethered signals. Triggers: evening close at 18:30 local if ≥5 signals landed and no close has been surfaced today. All other triggers (open-loop, stuck, cross-register-conflict, focus-mode) are stubs.
+
+### URL scheme
+
+```bash
+npm run daemon:install             # registers io.liminal.substrate
+bash scripts/register-url-scheme.sh # registers liminal:// URL scheme
+```
+
+Clicking the evening-close notification opens `liminal://close?surfacing_id=<uuid>`, which marks the surfacing accepted and points the user to `/close`.
 
 ## Testing
 
-Run the orchestrator directly (no Claude Code required):
-
 ```bash
-npm run test:orchestrator
+npm test
 ```
 
-Inspect the vault:
+Three suites:
 
-```bash
-npm run vault:show
-```
+- `test/orchestrator.test.js` — vault write paths for /check + tag enforcement
+- `test/daemon-ingest.test.js` — claude-code and git source readers
+- `test/surfacing-flow.test.js` — trigger -> surfacing_event -> /close -> correction round trip
 
-## Status
+## What this repo is not
 
-Day-by-day build log:
-
-- **Apr 21 (Mon) — Scaffold shipped.** Plugin manifest, SKILL.md, orchestrator, correction store, vault schema.
-- **Apr 22 (Tue)** — Forced-choice flow polish; question sequencing.
-- **Apr 23 (Wed)** — Agent prompt iteration on real state inputs.
-- **Apr 24 (Thu)** — Deliberation logic: agents see each other's reads, produce disagreement notes.
-- **Apr 25 (Fri)** — Correction UX + vault query utilities.
-- **Apr 26 (Sat)** — Demo video (60s).
-- **Apr 27 (Sun)** — Submission prep.
-- **Apr 28 (Mon)** — **Ship.**
+- Not the production product. No onboarding, no signup, no payment.
+- Not a customer-facing tool. Local-only. No cloud APIs beyond Anthropic.
+- Not a companion. No attachment loop. No streaks, scores, or wellness framing.
+- Not advisory. The system surfaces disagreement; the user decides what is true.
 
 ## License
 
@@ -134,4 +155,4 @@ Built by the Liminal Space co-founding team:
 - **Shruti Rajagopal** (CEO, full-time) · [theliminalspace.io](https://theliminalspace.io) · [Substack](https://liminalwoman.substack.com) · [X](https://x.com/ShrutiRajagopal)
 - **Shayaun Nejad** (Co-founder, Engineering, part-time — continuing at Rubrik) · UC Berkeley · systems and security · OffSec-certified · CHI 2027 paper co-author
 
-Part of [Liminal Space](https://theliminalspace.io) — a desktop workspace for founders, operators, and creatives at agentic scale. This plugin is the CLI surface of the agent architecture; the desktop app ships separately.
+Part of [Liminal Space](https://theliminalspace.io) — a desktop workspace for founders, operators, and creatives at agentic scale.

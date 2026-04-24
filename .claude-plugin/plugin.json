@@ -1,7 +1,7 @@
 {
   "name": "liminal-agents",
-  "description": "Three-agent deliberation for psychological state. Architect, Witness, and Contrarian read your state, disagree by design, and the correction becomes data. Built for Cerebral Valley x Anthropic Built with Opus 4.7 hackathon.",
-  "version": "0.1.0",
+  "description": "A CLI surface on the Liminal substrate. A background daemon ingests local signals; Architect, Witness, and Contrarian read them; your correction becomes data. Four canonical tables, nine canonical correction tags, and a correction stream that never converges. Built for Cerebral Valley x Anthropic Built with Opus 4.7 hackathon.",
+  "version": "0.2.0",
   "author": {
     "name": "Shruti Rajagopal",
     "url": "https://theliminalspace.io"
@@ -14,6 +14,7 @@
     "deliberation",
     "correction-loop",
     "bounded-agents",
+    "substrate",
     "cerebral-valley",
     "opus-4-7"
   ],
