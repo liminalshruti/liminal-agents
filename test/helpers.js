@@ -2,20 +2,28 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import Database from "better-sqlite3";
+import Database from "better-sqlite3-multiple-ciphers";
+
+// Fixed test key — never used outside the test harness. Tests set this
+// env var so the keyguard short-circuits and never touches the real Keychain.
+const TEST_KEY_HEX =
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 export function makeTempVault() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "liminal-test-"));
   process.env.LIMINAL_VAULT_DIR = dir;
+  process.env.LIMINAL_VAULT_KEY = TEST_KEY_HEX;
   return dir;
 }
 
 export function cleanupVault(dir) {
   if (dir && fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  delete process.env.LIMINAL_VAULT_KEY;
 }
 
 export function writeLegacyVault(dbFilePath, rows = []) {
-  // Mirror the v0.1 single-table schema the importer expects.
+  // Mirror the v0.1 single-table schema the importer expects. Legacy DB is
+  // plaintext; we open it without cipher pragmas.
   fs.mkdirSync(path.dirname(dbFilePath), { recursive: true });
   if (fs.existsSync(dbFilePath)) fs.rmSync(dbFilePath);
   const db = new Database(dbFilePath);
