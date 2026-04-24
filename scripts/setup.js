@@ -6,6 +6,7 @@
 
 import { openVault } from "../lib/vault/db.js";
 import { ensureIntegrations } from "../lib/config/integrations.js";
+import { migrateToEncrypted } from "./migrate-encrypt.js";
 import {
   vaultDir,
   vaultDbPath,
@@ -13,6 +14,10 @@ import {
   daemonLogPath,
 } from "../lib/vault/path.js";
 
+const migration = migrateToEncrypted();
+if (migration.migrated) {
+  console.log(`migrated plaintext vault to SQLCipher v4: ${migration.path}`);
+}
 const db = openVault();
 const cfg = ensureIntegrations();
 db.close();

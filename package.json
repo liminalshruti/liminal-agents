@@ -23,11 +23,12 @@
     "test:orchestrator": "node --test test/orchestrator.test.js",
     "test:ingest": "node --test test/daemon-ingest.test.js",
     "test:surfacing": "node --test test/surfacing-flow.test.js",
-    "vault:show": "sqlite3 \"$HOME/Library/Application Support/Liminal/vault.db\" 'SELECT id, timestamp, trigger, user_state FROM deliberations ORDER BY timestamp DESC LIMIT 10;'"
+    "test:crypto": "node --test test/vault-crypto.test.js",
+    "vault:migrate": "node scripts/migrate-encrypt.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
-    "better-sqlite3": "^11.8.0",
+    "better-sqlite3-multiple-ciphers": "^12.9.0",
     "pino": "^9.5.0"
   },
   "engines": {
