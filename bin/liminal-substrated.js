@@ -9,12 +9,15 @@
  * a noop so enabling it doesn't silently fail.
  */
 
+import Anthropic from "@anthropic-ai/sdk";
 import { openVault } from "../lib/vault/db.js";
 import { ensureIntegrations } from "../lib/config/integrations.js";
 import { log } from "../lib/log.js";
 import * as claudeCode from "../lib/sources/claude-code.js";
 import * as git from "../lib/sources/git.js";
 import * as stub from "../lib/sources/stub.js";
+import { detectThreads } from "../lib/daemon/thread-detect.js";
+import { runTriggers } from "../lib/daemon/triggers.js";
 
 const REAL_SOURCES = {
   "claude-code": claudeCode,
@@ -48,16 +51,32 @@ async function ingestOnce(db, config) {
   }
 }
 
-async function tick(db, config) {
+async function tick(db, config, client) {
   await ingestOnce(db, config);
-  // PR3 hooks: thread detection + trigger runner inserted here.
+  try {
+    const td = await detectThreads({ db, client, log });
+    log.info(td, "thread_detect");
+  } catch (err) {
+    log.error({ err: err.message }, "thread_detect_error");
+  }
+  try {
+    const tg = await runTriggers({ db, now: new Date(), log });
+    log.info(tg, "triggers");
+  } catch (err) {
+    log.error({ err: err.message }, "trigger_error");
+  }
 }
 
 async function main() {
   const db = openVault();
   const config = ensureIntegrations();
   const pollSec = Number(process.env.LIMINAL_POLL_SEC) || POLL_DEFAULT_SEC;
-  log.info({ pid: process.pid, pollSec }, "daemon_start");
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const client = apiKey ? new Anthropic({ apiKey }) : null;
+  log.info(
+    { pid: process.pid, pollSec, haiku: Boolean(client) },
+    "daemon_start",
+  );
 
   process.on("SIGTERM", () => {
     stopping = true;
@@ -68,7 +87,7 @@ async function main() {
 
   while (!stopping) {
     try {
-      await tick(db, config);
+      await tick(db, config, client);
     } catch (err) {
       log.error({ err: err.message, stack: err.stack }, "tick_error");
     }
