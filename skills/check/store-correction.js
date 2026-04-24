@@ -1,42 +1,44 @@
 #!/usr/bin/env node
 /**
- * Store the user's correction to a prior deliberation.
+ * Store a correction against a prior deliberation.
  *
- * Input: vault_id, agent_name (Architect | Witness | Contrarian), reason string
- * Updates the SQLite row with correction_agent, correction_reason, correction_timestamp.
- *
- * The correction is the product. This script is what makes the vault accumulate
- * semantic deltas between AI reads and user experience.
+ * Usage: store-correction.js <vault_id> <agent_name> <tag> <reason...>
+ * Writes: one row in `corrections`. Tag must be one of the canonical taxonomy.
  */
 
-import Database from "better-sqlite3";
-import path from "path";
-import os from "os";
+import { openVault } from "../../lib/vault/db.js";
+import { newId } from "../../lib/vault/ids.js";
+import { CORRECTION_TAGS, isValidTag } from "../../lib/correction-tags.js";
+import { AGENT_NAMES } from "../../lib/agents/index.js";
 
-const VAULT_PATH = path.join(os.homedir(), ".liminal-agents-vault.db");
-
-const [vaultId, agent, ...reasonParts] = process.argv.slice(2);
+const [vaultId, agent, tag, ...reasonParts] = process.argv.slice(2);
 const reason = reasonParts.join(" ");
 
-if (!vaultId || !agent || !reason) {
+if (!vaultId || !agent || !tag || !reason) {
   console.error(
-    "Usage: store-correction.js <vault_id> <agent_name> <reason text>"
+    "Usage: store-correction.js <vault_id> <agent_name> <tag> <reason text>",
   );
-  console.error('Example: store-correction.js abc-123 Witness "missed the compensatory move"');
+  console.error(`  valid agents: ${AGENT_NAMES.join(", ")}`);
+  console.error(`  valid tags:   ${CORRECTION_TAGS.join(", ")}`);
   process.exit(1);
 }
 
-const validAgents = ["Architect", "Witness", "Contrarian"];
-if (!validAgents.includes(agent)) {
+if (!AGENT_NAMES.includes(agent)) {
   console.error(
-    `ERROR: agent must be one of ${validAgents.join(", ")}. Got: ${agent}`
+    `ERROR: agent must be one of ${AGENT_NAMES.join(", ")}. Got: ${agent}`,
   );
   process.exit(1);
 }
 
-const db = new Database(VAULT_PATH);
+if (!isValidTag(tag) || tag == null) {
+  console.error(
+    `ERROR: tag must be one of ${CORRECTION_TAGS.join(", ")}. Got: ${tag}`,
+  );
+  process.exit(1);
+}
 
-// Verify the deliberation exists
+const db = openVault();
+
 const existing = db
   .prepare("SELECT id FROM deliberations WHERE id = ?")
   .get(vaultId);
@@ -46,25 +48,22 @@ if (!existing) {
   process.exit(1);
 }
 
+const correctionId = newId();
 db.prepare(
-  `
-  UPDATE deliberations
-  SET correction_agent = ?,
-      correction_reason = ?,
-      correction_timestamp = ?
-  WHERE id = ?
-`
-).run(agent, reason, Date.now(), vaultId);
+  `INSERT INTO corrections (id, deliberation_id, timestamp, agent, tag, reason, schema_version, vault_origin)
+   VALUES (?, ?, ?, ?, ?, ?, 1, 'native')`,
+).run(correctionId, vaultId, Date.now(), agent, tag, reason);
 
 console.log(
   JSON.stringify(
     {
+      correction_id: correctionId,
       vault_id: vaultId,
-      correction_stored: true,
       agent,
+      tag,
       reason,
     },
     null,
-    2
-  )
+    2,
+  ),
 );

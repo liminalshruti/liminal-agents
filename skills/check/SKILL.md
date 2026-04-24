@@ -1,6 +1,6 @@
 ---
 name: check
-description: Three-agent deliberation on the user's psychological state. Asks three forced-choice questions, runs Architect / Witness / Contrarian agents in parallel via Opus 4.7, surfaces their disagreement, and captures the user's correction to a local SQLite vault.
+description: Three-agent deliberation on the user's psychological state. Asks three forced-choice questions, runs Architect / Witness / Contrarian via Opus 4.7, surfaces their disagreement, and writes the user's correction — tagged from the canonical taxonomy — to the local vault.
 disable-model-invocation: true
 allowed-tools: Bash(node *)
 argument-hint: "[optional: context or note about current state]"
@@ -8,7 +8,7 @@ argument-hint: "[optional: context or note about current state]"
 
 # Liminal Agents — Deliberation Check
 
-You are orchestrating a three-agent deliberation. The core thesis: better AI produces more interesting disagreements, not fewer. The user's correction of the agents' reads is the product.
+You are orchestrating a three-agent deliberation. The correction loop does not converge. Agents never read prior corrections. The user's correction is the product.
 
 ## Flow
 
@@ -34,48 +34,58 @@ Ask the user three questions in sequence. Each is binary (A or B). Wait for all 
 [B] deferred — later, after, not yet
 ```
 
-Accept answers as "A B A" or "B, B, A" or similar. Parse into a JSON string like `{"q1":"A","q2":"B","q3":"A"}`.
+Accept answers as "A B A" or "B, B, A" or similar. Parse into JSON: `{"q1":"A","q2":"B","q3":"A"}`.
 
 ### 2. Run the orchestrator
-
-Once you have all three answers, invoke the orchestrator:
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/skills/check/orchestrator.js '{"q1":"A","q2":"B","q3":"A"}'
 ```
 
-Include the user's optional $ARGUMENTS as a second argument if provided.
+If the user provided $ARGUMENTS, pass it as a second shell argument.
 
-The orchestrator returns JSON with:
-- `vault_id` — unique record ID for this deliberation
-- `architect` — { interpretation }
-- `witness` — { interpretation }
-- `contrarian` — { interpretation }
+Returns: `vault_id`, `signal_id`, `user_state`, and three `{interpretation}` fields (architect / witness / contrarian).
 
 ### 3. Present the disagreement
 
-Show all three readings to the user, clearly labeled. Then ask:
+Show all three readings, labeled. Then:
 
 > "Which reading is wrong, and why? Your correction enters the vault."
 
-### 4. Store the correction
+### 4. Tag the correction
 
-When the user responds (e.g. "Contrarian is wrong because I'm not testing limits, I'm avoiding them"), invoke the correction script:
+When the user explains what was wrong, map their reason to one of the nine canonical correction tags. Pick the closest fit; do not invent new tags.
+
+| tag | meaning |
+|---|---|
+| `wrong_frame` | agent used the wrong lens entirely |
+| `wrong_intensity` | reading was too strong or too weak |
+| `wrong_theory` | causal story behind the read is incorrect |
+| `right_but_useless` | accurate but does nothing for the user |
+| `right_but_already_known` | surfaces nothing the user did not already see |
+| `too_generic` | could apply to anyone; not about this state |
+| `missed_compensation` | user is already balancing for this |
+| `assumes_facts_not_in_evidence` | projected context that isn't there |
+| `off_by_layer` | correct direction, wrong layer |
+
+If the user's reason is ambiguous, briefly confirm your tag choice with them in one sentence before writing.
+
+### 5. Store the correction
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/check/store-correction.js <vault_id> "<agent_name>" "<reason>"
+node ${CLAUDE_PLUGIN_ROOT}/skills/check/store-correction.js <vault_id> "<agent_name>" "<tag>" "<reason>"
 ```
 
-Confirm the correction was stored. End the check.
+Confirm the correction was written. End the check.
 
 ## Voice rules
 
-- No hedging. The agents take positions. Report their positions without softening.
-- Never offer a fourth interpretation. The product is the user correcting one of the three.
-- Don't analyze the correction. The vault stores it. Your job is orchestration, not interpretation.
+- No hedging. Agents take positions; report them without softening.
+- Never offer a fourth interpretation. The product is the correction.
+- Do not analyze the correction. Orchestrate. Do not interpret.
 
-## What this plugin is not
+## What this skill is not
 
-- Not a chatbot — the agents don't continue the conversation after the correction is stored
-- Not advisory — the system measures and surfaces disagreement; the user decides what's true
-- Not companion AI — no attachment loop, no memory of you, just structured correction
+- Not a chatbot. Agents do not continue after the correction is stored.
+- Not advisory. The system surfaces disagreement; the user decides what's true.
+- Not companion. No attachment loop, no memory of the user in agent prompts.

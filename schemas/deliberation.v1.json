@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liminal.local/schemas/deliberation.v1.json",
+  "title": "deliberation",
+  "description": "One bounded three-agent read. Agents do not adapt to prior corrections. System prompts never reference user history.",
+  "type": "object",
+  "required": [
+    "id",
+    "timestamp",
+    "trigger",
+    "schema_version",
+    "vault_origin"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "integer" },
+    "trigger": { "type": "string", "enum": ["check", "close"] },
+    "signal_ids": {
+      "type": ["array", "null"],
+      "items": { "type": "string", "format": "uuid" }
+    },
+    "user_state": { "type": ["string", "null"] },
+    "user_context": { "type": ["string", "null"] },
+    "architect_view": { "type": ["string", "null"] },
+    "witness_view": { "type": ["string", "null"] },
+    "contrarian_view": { "type": ["string", "null"] },
+    "schema_version": { "type": "integer", "const": 1 },
+    "vault_origin": { "type": "string", "enum": ["native", "legacy-import"] }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liminal.local/schemas/correction.v1.json",
+  "title": "correction",
+  "description": "The semantic delta between an agent read and the user's experience. The Correction Stream is the novel data category (reference implementation; PPA pending).",
+  "type": "object",
+  "required": [
+    "id",
+    "deliberation_id",
+    "timestamp",
+    "agent",
+    "reason",
+    "schema_version",
+    "vault_origin"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "deliberation_id": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "integer" },
+    "agent": { "type": "string", "enum": ["Architect", "Witness", "Contrarian"] },
+    "tag": {
+      "type": ["string", "null"],
+      "enum": [
+        "wrong_frame",
+        "wrong_intensity",
+        "wrong_theory",
+        "right_but_useless",
+        "right_but_already_known",
+        "too_generic",
+        "missed_compensation",
+        "assumes_facts_not_in_evidence",
+        "off_by_layer",
+        null
+      ],
+      "description": "Canonical taxonomy. Null permitted only for legacy-import rows."
+    },
+    "reason": { "type": "string" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "vault_origin": { "type": "string", "enum": ["native", "legacy-import"] }
+  },
+  "additionalProperties": false
+}
