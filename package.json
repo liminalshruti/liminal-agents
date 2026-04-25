@@ -17,6 +17,7 @@
   },
   "scripts": {
     "setup": "node scripts/setup.js",
+    "backfill": "node scripts/backfill.js",
     "daemon:install": "bash scripts/install-daemon.sh",
     "daemon:uninstall": "bash scripts/uninstall-daemon.sh",
     "test": "node --test test/*.test.js",

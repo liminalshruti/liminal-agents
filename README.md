@@ -1,8 +1,14 @@
 # Liminal Agents
 
-> A CLI surface on the Liminal substrate. Three agents read your state. They disagree. Your correction becomes data.
+> Telemetry for your own thinking. Reads the surfaces where your work actually happens. Emits multi-axis readings of what you're working on, tracked across weeks.
 
-A Claude Code plugin built for the **Cerebral Valley × Anthropic "Built with Opus 4.7" hackathon** (Apr 21–28, 2026). It is the publishable edge of one architectural idea: a background substrate that ingests local signals, bounded agents that deliberate over them, and a correction stream that never converges.
+A Claude Code plugin built for the **Cerebral Valley × Anthropic "Built with Opus 4.7" hackathon** (Apr 21–28, 2026).
+
+Most knowledge work happens across surfaces no one stitches back together. Granola has your meetings. Claude Code has your sessions. Git has the commits. By Friday, what you decided on Monday is gone.
+
+Liminal Agents ingests the surfaces, runs three bounded agents over each signal, and writes the readings to a local SQLite vault. The agents disagree by design — three orthogonal axes per signal, not one consensus answer. Over time the record shows drift, recurrence, and the threads you keep circling without closing.
+
+This release ships Granola, Claude Code, and Git readers. The substrate is source-agnostic; additional readers slot in without touching the data model.
 
 ## Scope
 
@@ -64,13 +70,36 @@ Each agent has a domain and an anti-domain. Refusal is an output, not an error. 
 git clone https://github.com/liminalshruti/liminal-agents.git
 cd liminal-agents
 npm install
-export ANTHROPIC_API_KEY=sk-...
+claude setup-token          # one-time; inherits your Claude subscription auth
 npm run setup
+npm run backfill            # one-shot ingest from Granola + ~/.claude
 npm run daemon:install      # macOS only; registers io.liminal.substrate
 claude --plugin-dir .
 ```
 
-`npm run setup` is idempotent. It creates the vault directory, writes default `integrations.json` if absent, and imports `~/.liminal-agents-vault.db` into the new substrate tagged `vault_origin='legacy-import'` on first run.
+### Anthropic credentials
+
+Two paths, picked transparently by `lib/anthropic-client.js`:
+
+**A. Console API key** (faster, full control over `max_tokens` / `temperature` / parallelism):
+```bash
+export ANTHROPIC_API_KEY=sk-ant-api03-...
+```
+
+**B. Claude Code subscription** (no separate billing, slower, resource-heavy — see warning):
+```bash
+claude setup-token   # one-time; OAuth token stored in macOS Keychain
+```
+
+When no `sk-ant-api03-` key is set, the substrate falls back to spawning `claude -p` for inference. The OAuth token is read from Keychain by the CLI itself — no env wiring needed. Latency is ~5–10s per call vs. ~0.5–2s for the direct API.
+
+> **Warning — CLI mode is heavy.** Each `claude -p` invocation boots a full Claude Code runtime, including every MCP server in your global config (Atlassian, Drive, Playwright, etc. — easily 1–2 GB RAM apiece). The substrate forces all CLI calls to run **single-flight** (one at a time, no parallelism) and the daemon **skips thread-detection** in CLI mode to stop a 5-minute resource leak. Even so, `/check` takes 25–40s and `/close` takes 60–120s. For demo or live use, an API key is strongly recommended.
+
+The daemon logs which mode is active at startup as `anthropic_mode: api | cli | none`.
+
+`npm run setup` is idempotent. It creates the vault directory, writes default `integrations.json` if absent, migrates stub source entries to real readers when one ships, and imports `~/.liminal-agents-vault.db` into the new substrate tagged `vault_origin='legacy-import'` on first run.
+
+`npm run backfill` runs a single ingest tick against every enabled real source so the vault has telemetry immediately, without waiting for the daemon's first poll.
 
 ## Use
 
@@ -109,10 +138,13 @@ Landed-vs-corrected per agent, broken down by canonical correction tag.
 
 The daemon polls every 5 minutes (override with `LIMINAL_POLL_SEC`). Sources in this release:
 
+- **granola** — reads meeting docs and transcripts from the local Granola cache at `~/Library/Application Support/Granola/cache-v6.json` (register: inner)
 - **claude-code** — walks `~/.claude/projects/**/*.jsonl` for user messages (register: inner)
 - **git** — scans configured repo paths for new commits (register: operational)
 
-Not yet implemented, wired as stubs: `granola`, `calendar`, `knowledgeC`, `imessage`, `obsidian`. Enabling them in `integrations.json` logs a noop until the reader ships.
+Override the Granola cache location with `LIMINAL_GRANOLA_PATH` (used by tests; rarely needed in production).
+
+Not yet implemented, wired as stubs: `calendar`, `knowledgeC`, `imessage`, `obsidian`. Enabling them in `integrations.json` logs a noop until the reader ships.
 
 Thread detection runs each tick via Haiku 4.5, grouping untethered signals. Triggers: evening close at 18:30 local if ≥5 signals landed and no close has been surfaced today. All other triggers (open-loop, stuck, cross-register-conflict, focus-mode) are stubs.
 

@@ -9,12 +9,13 @@
  * a noop so enabling it doesn't silently fail.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { openVault } from "../lib/vault/db.js";
 import { ensureIntegrations } from "../lib/config/integrations.js";
 import { log } from "../lib/log.js";
+import { makeClient, CLIENT_MODE_CLI } from "../lib/anthropic-client.js";
 import * as claudeCode from "../lib/sources/claude-code.js";
 import * as git from "../lib/sources/git.js";
+import * as granola from "../lib/sources/granola.js";
 import * as stub from "../lib/sources/stub.js";
 import { detectThreads } from "../lib/daemon/thread-detect.js";
 import { runTriggers } from "../lib/daemon/triggers.js";
@@ -22,9 +23,10 @@ import { runTriggers } from "../lib/daemon/triggers.js";
 const REAL_SOURCES = {
   "claude-code": claudeCode,
   git,
+  granola,
 };
 
-const STUB_SOURCES = ["granola", "calendar", "knowledgeC", "imessage", "obsidian"];
+const STUB_SOURCES = ["calendar", "knowledgeC", "imessage", "obsidian"];
 const POLL_DEFAULT_SEC = 300;
 
 let stopping = false;
@@ -51,13 +53,20 @@ async function ingestOnce(db, config) {
   }
 }
 
-async function tick(db, config, client) {
+async function tick(db, config, client, mode) {
   await ingestOnce(db, config);
-  try {
-    const td = await detectThreads({ db, client, log });
-    log.info(td, "thread_detect");
-  } catch (err) {
-    log.error({ err: err.message }, "thread_detect_error");
+  // Thread-detect spawns a Haiku call per tick. In CLI mode each call boots a
+  // full Claude Code runtime with all MCP servers — too expensive to run every
+  // 5 minutes on a desktop. Skip it; user-invoked /check and /close still work.
+  if (mode === CLIENT_MODE_CLI) {
+    log.info({ mode }, "thread_detect_skipped_cli_mode");
+  } else {
+    try {
+      const td = await detectThreads({ db, client, log });
+      log.info(td, "thread_detect");
+    } catch (err) {
+      log.error({ err: err.message }, "thread_detect_error");
+    }
   }
   try {
     const tg = await runTriggers({ db, now: new Date(), log });
@@ -71,10 +80,9 @@ async function main() {
   const db = openVault();
   const config = ensureIntegrations();
   const pollSec = Number(process.env.LIMINAL_POLL_SEC) || POLL_DEFAULT_SEC;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const client = apiKey ? new Anthropic({ apiKey }) : null;
+  const { client, mode } = makeClient({ log });
   log.info(
-    { pid: process.pid, pollSec, haiku: Boolean(client) },
+    { pid: process.pid, pollSec, anthropic_mode: mode || "none" },
     "daemon_start",
   );
 
@@ -87,7 +95,7 @@ async function main() {
 
   while (!stopping) {
     try {
-      await tick(db, config, client);
+      await tick(db, config, client, mode);
     } catch (err) {
       log.error({ err: err.message, stack: err.stack }, "tick_error");
     }
