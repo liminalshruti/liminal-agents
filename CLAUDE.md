@@ -20,18 +20,27 @@ When working here, optimize for:
 
 ## Stack
 
-- **Runtime:** Claude Code plugin (`.claude-plugin/plugin.json` manifest)
-- **Language:** JavaScript (Node 18+)
-- **Storage:** Local SQLite at `~/.liminal-agents-vault.db`
-- **AI:** Anthropic SDK calling Opus 4.7
+- **Runtime:** Claude Code plugin (`.claude-plugin/plugin.json` manifest) + a launchd-managed background daemon
+- **Language:** JavaScript (ESM, Node 20+)
+- **Storage:** Local SQLite at `~/Library/Application Support/Liminal/vault.db`. Legacy `~/.liminal-agents-vault.db` auto-imports on first run.
+- **AI:** Anthropic SDK — Opus 4.7 for deliberation (/check, /close); Haiku 4.5 for thread detection
+
+## Substrate shape (v0.2)
+
+Four canonical tables: `signal_events`, `deliberations`, `corrections`, `surfacing_events`. Every row has `schema_version` and `vault_origin`. JSON Schema files live in `schemas/` and are copied into the vault's `schemas/` dir on init so the data is inspectable without the code.
+
+Correction taxonomy is frozen in `lib/correction-tags.js` — nine tags, additions require the schema to bump.
+
+Bounded agent prompts live one-per-file in `lib/agents/*.js` and are never mutated by correction data. If you are editing an agent, edit the prompt, not the caller.
 
 ## Agent guidelines for THIS code
 
-1. **Don't add new dependencies.** Hackathon code stays small — current deps are intentional. If you genuinely need a new dep, justify in the commit message.
-2. **Match existing style.** No type system (plain JS), small files, no class hierarchies. Read `skills/check/orchestrator.js` for the pattern.
-3. **Keep the three agents bounded.** Architect / Witness / Contrarian have explicit anti-domains. Don't let them blur into general-purpose agents.
-4. **Vault schema is locked.** Don't migrate the SQLite schema mid-hackathon — judges may inspect existing data.
-5. **No emojis in commits, code, or copy.** (Per global Liminal Space convention.)
+1. **Don't add new dependencies.** v0.2 added pino; that was intentional. Further adds need justification in the commit message.
+2. **Match existing style.** No type system (plain JS), small files, no class hierarchies. Read `skills/check/orchestrator.js` and `bin/liminal-substrated.js` for the pattern.
+3. **Keep the three agents bounded.** Architect / Witness / Contrarian have explicit anti-domains. Don't let them blur into general-purpose agents. Don't let them read corrections.
+4. **Vault schema is locked.** Don't migrate tables mid-hackathon — judges may inspect existing data. Add fields only via new `schema_version`.
+5. **Correction loop does not converge.** Don't write code that adapts agents to past corrections. The record is the moat.
+6. **No emojis in commits, code, or copy.** (Per global Liminal Space convention.)
 
 ## Liminal Space context
 

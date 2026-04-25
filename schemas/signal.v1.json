@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liminal.local/schemas/signal.v1.json",
+  "title": "signal_event",
+  "description": "A single observed signal from a local source. Inner (affective) and operational (action) signals share this schema.",
+  "type": "object",
+  "required": [
+    "id",
+    "timestamp",
+    "source",
+    "kind",
+    "register",
+    "content",
+    "schema_version",
+    "vault_origin"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "integer", "description": "Unix ms." },
+    "source": {
+      "type": "string",
+      "enum": [
+        "claude-code",
+        "git",
+        "user-check",
+        "granola",
+        "calendar",
+        "knowledgeC",
+        "imessage",
+        "obsidian"
+      ]
+    },
+    "kind": { "type": "string", "description": "Source-specific subtype, e.g. 'message', 'commit', 'check-response'." },
+    "register": { "type": "string", "enum": ["inner", "operational"] },
+    "thread_id": { "type": ["string", "null"] },
+    "content": { "type": "object", "description": "Source-specific payload." },
+    "schema_version": { "type": "integer", "const": 1 },
+    "vault_origin": { "type": "string", "enum": ["native", "legacy-import"] }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liminal.local/schemas/surfacing.v1.json",
+  "title": "surfacing_event",
+  "description": "A daemon-initiated prompt to the user. One row per trigger; linked to a deliberation if the user enters the flow.",
+  "type": "object",
+  "required": [
+    "id",
+    "timestamp",
+    "trigger",
+    "status",
+    "schema_version",
+    "vault_origin"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "integer" },
+    "trigger": {
+      "type": "string",
+      "enum": ["close", "open-loop", "stuck", "cross-register-conflict", "focus-mode"]
+    },
+    "status": { "type": "string", "enum": ["pending", "accepted", "dismissed"] },
+    "payload": { "type": ["object", "null"] },
+    "deliberation_id": { "type": ["string", "null"], "format": "uuid" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "vault_origin": { "type": "string", "enum": ["native", "legacy-import"] }
+  },
+  "additionalProperties": false
+}
