@@ -100,7 +100,18 @@ async function main() {
       log.error({ err: err.message, stack: err.stack }, "tick_error");
     }
     if (stopping) break;
-    await new Promise((r) => setTimeout(r, pollSec * 1000));
+    // Cancelable sleep: a SIGTERM/SIGINT during the poll interval should wake
+    // us immediately so launchd doesn't have to force-kill (which can leave
+    // the SQLite WAL in an indeterminate state).
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, pollSec * 1000);
+      const onSig = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      process.once("SIGTERM", onSig);
+      process.once("SIGINT", onSig);
+    });
   }
 
   db.close();
