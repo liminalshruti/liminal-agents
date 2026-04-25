@@ -9,21 +9,10 @@
  * Agents never read prior corrections. System prompts never reference user history.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { openVault } from "../../lib/vault/db.js";
 import { newId } from "../../lib/vault/ids.js";
 import { runAllAgents } from "../../lib/agents/index.js";
-
-const API_KEY =
-  process.env.ANTHROPIC_API_KEY ||
-  process.env.CLAUDE_PLUGIN_OPTION_ANTHROPIC_API_KEY;
-
-if (!API_KEY) {
-  console.error(
-    "ERROR: ANTHROPIC_API_KEY not set. Export it in your shell or configure the plugin.",
-  );
-  process.exit(1);
-}
+import { makeClientOrExit } from "../../lib/anthropic-client.js";
 
 const inputRaw = process.argv[2];
 const userContext = process.argv[3] || null;
@@ -101,7 +90,7 @@ db.prepare(
 );
 
 try {
-  const client = new Anthropic({ apiKey: API_KEY });
+  const { client } = makeClientOrExit();
   const byName = await runAllAgents(client, userState, userContext);
 
   db.prepare(

@@ -16,9 +16,22 @@ if (!plistPath || !nodePath || !scriptPath || !logPath) {
   process.exit(1);
 }
 
+const FORWARD_VARS = [
+  // Anthropic credential candidates — daemon picks the first one set.
+  "ANTHROPIC_API_KEY",
+  "CLAUDE_PLUGIN_OPTION_ANTHROPIC_API_KEY",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "ANTHROPIC_AUTH_TOKEN",
+  // Vault env (only set when running in dev/test mode without keyguard binary).
+  "LIMINAL_VAULT_KEY",
+  // Source overrides used by tests + power users.
+  "LIMINAL_GRANOLA_PATH",
+  "LIMINAL_POLL_SEC",
+];
+
 const env = {};
-if (process.env.ANTHROPIC_API_KEY) {
-  env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+for (const name of FORWARD_VARS) {
+  if (process.env[name]) env[name] = process.env[name];
 }
 
 const plist = renderPlist({
