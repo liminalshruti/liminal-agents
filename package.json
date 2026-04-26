@@ -13,10 +13,14 @@
   },
   "bin": {
     "liminal-substrated": "bin/liminal-substrated.js",
-    "liminal-surface": "bin/liminal-surface.js"
+    "liminal-surface": "bin/liminal-surface.js",
+    "liminal-tui": "bin/liminal-tui.js"
   },
   "scripts": {
     "setup": "node scripts/setup.js",
+    "tui": "node bin/liminal-tui.js",
+    "agency": "node skills/agency/run.js",
+    "seed:demo": "node scripts/seed-demo.js",
     "backfill": "node scripts/backfill.js",
     "daemon:install": "bash scripts/install-daemon.sh",
     "daemon:uninstall": "bash scripts/uninstall-daemon.sh",
@@ -30,7 +34,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
     "better-sqlite3-multiple-ciphers": "^12.9.0",
-    "pino": "^9.5.0"
+    "ink": "^7.0.1",
+    "ink-text-input": "^6.0.0",
+    "pino": "^9.5.0",
+    "react": "^19.0.0"
   },
   "engines": {
     "node": ">=20.0.0"
