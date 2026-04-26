@@ -269,7 +269,12 @@ Three of four judges build memory infrastructure for AI agents. **The vault's en
 
 ## Related work
 
-This plugin is one of two shipping vehicles for the Liminal architecture. The desktop MVP (`liminal-desktop`, May 2026) is the production surface for the personalized epistemic agent — same bounded refusal + correction stream substrate, rendered in a Tauri client with visual artifacts instead of a CLI. The plugin's vault schema and agent prompts are designed to converge with the desktop client.
+This plugin is one of two shipping vehicles for the Liminal architecture. The other:
+
+- **[theliminalspace.io](https://theliminalspace.io)** — consumer surface, 7-factor coherence vault, "model of you" register. Liminal Agents (this plugin) is the B2B surface. Same substrate, different audience.
+- **`liminal-desktop`** (May 2026) — production surface for the personalized epistemic agent, same bounded refusal + correction stream substrate, rendered in a Tauri client with visual artifacts instead of a CLI.
+
+The plugin's vault schema and agent prompts are designed to converge with the desktop client.
 
 For the architectural background:
 - **PPA #4 — Bounded Agent Refusal** — agents with explicit anti-domains that refuse out-of-domain prompts; refusal as designed output.
