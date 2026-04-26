@@ -119,6 +119,38 @@ const gitCommit = {
   subject: "feat: bounded refusal in agent system prompts",
 };
 
+// === SIGNAL 6: Granola — team coherence drift signal (advanced demo beat) ===
+// Demonstrates the wedge expansion the Apr 25 hackathon strategy meeting named:
+// "Liminal personal" → "Liminal team" → coherence drift detection. The agents
+// can read this and the Auditor can flag the drift. Not for the 60-sec video,
+// but available for the live Q&A or stretch demo if judges ask "what else?"
+const granolaTeamMeeting = {
+  doc_id: "synthetic-doc-006",
+  title: "Weekly 1:1 — Jordan (eng contractor)",
+  notes: [
+    "Jordan, 4 weeks into 6-month engineering contract on the agentic-OS pipeline.",
+    "Stated goal in onboarding: ship the daemon ingestion layer by week 8. Was excited about the bounded-agent architecture.",
+    "This week's signals are diverging from that:",
+    "  - Standup updates are 1-line, no detail. Last 3 weeks running.",
+    "  - Slack activity dropped to <5 messages/day from ~25/day in week 1-2.",
+    "  - PR descriptions stopped including 'why' — just 'what' (was including both).",
+    "  - Said in 1:1: 'I have some side projects I'm exploring' — when I asked which, was vague.",
+    "  - Asked for read access to repos outside the contract scope. Said 'just curious about the architecture.' Granted but flagged.",
+    "Cross-thread: the architecture docs Jordan asked about are the IP we're filing PPAs on next week. Timing is unusual.",
+    "No evidence of bad intent. Just signal divergence between stated commitment and observed behavior.",
+    "Need: structured read of whether this is a coherence drift worth flagging, or normal end-of-onboarding cooling, or my own paranoia.",
+  ].join("\n"),
+  summary: "Weekly 1:1 with engineering contractor showing 3-week pattern of disengagement signals + an unusual repo-access request adjacent to pre-filing IP.",
+  transcript_excerpt:
+    "ME: How's the daemon work going? JORDAN: Yeah, good. Making progress. ME: What's blocking? JORDAN: Nothing really. ME: I noticed your PR descriptions got shorter — anything I should know? JORDAN: Just trying to move faster. ME: Okay. Anything else on your mind? JORDAN: I've been exploring some side projects. ME: Which ones? JORDAN: Just stuff. Architecture-curious things. ME: Including in our codebase? JORDAN: I asked for read access to a few repos. Just to learn the architecture better. ME: Specifically? JORDAN: The agent stuff and the substrate layer. (long pause) ME: Okay.",
+  text: "Meeting: Weekly 1:1 — Jordan (eng contractor)\n3-week disengagement pattern + repo-access request adjacent to pre-filing IP. Need structured read.",
+  has_transcript: true,
+  transcript_length: 1800,
+  people_count: 2,
+  created_at: new Date(NOW - 6 * HOUR).toISOString(),
+  updated_at: new Date(NOW - 4 * HOUR).toISOString(),
+};
+
 // ---- write everything ----
 
 const insertSignal = db.prepare(`
@@ -199,6 +231,18 @@ insertSignal.run(
   JSON.stringify(gitCommit),
 );
 written.push({ id: gitId, source: "git", title: gitCommit.subject });
+
+// Granola — team coherence drift signal
+const teamId = newId();
+insertSignal.run(
+  teamId,
+  new Date(granolaTeamMeeting.updated_at).getTime(),
+  "granola",
+  "meeting",
+  "operational",
+  JSON.stringify(granolaTeamMeeting),
+);
+written.push({ id: teamId, source: "granola", title: granolaTeamMeeting.title });
 
 // ---- summary ----
 

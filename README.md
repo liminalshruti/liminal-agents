@@ -14,6 +14,14 @@ A Claude Code plugin built for the **AI Agent Economy Hackathon** (Topify AI / A
 
 Refusal is not an error state. **Refusal is the feature.** When the SDR tries to do research, you don't get a worse research artifact — you get a clear redirect. The agent knows what it is for.
 
+## Bigger picture: a transition workspace, not an AI workspace
+
+AI is a capability, not a category. The product is the workspace; the agents are infrastructure. **Liminal is a transition workspace for unresolved context** — for the moments before something becomes a note, a task, a plan, a decision, or an identity-level commitment.
+
+Founders and creators live in unresolved decisions all the time. The substrate this hackathon ships — bounded refusal, encrypted vault, correction stream — is what makes a transition workspace trustworthy: agents that won't pretend, a record that won't leak, a memory that's yours.
+
+The hackathon submission demonstrates one slice (B2B agency-priced work). The architecture supports the full surface.
+
 ## Quickstart
 
 ```bash

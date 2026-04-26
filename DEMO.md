@@ -97,6 +97,27 @@ node bin/liminal-tui.js "is this email ready to send: 'Maya - moat question. Wor
 - SDR → REFUSED, "the Auditor decides whether it ships"
 - Auditor → COMPLETE, verdict + specific gap
 
+### Run 4 (live Q&A / stretch demo) — organizational coherence drift
+
+This is **NOT** for the 60s video. It's the second-act demo to show in live Q&A or if the judges ask "what else?" — demonstrating the wedge expansion from "Liminal personal" to "Liminal team" (Apr 25 hackathon strategy meeting).
+
+**Command:**
+```bash
+node bin/liminal-tui.js "read this 1:1 transcript and tell me if there's a coherence drift worth flagging"
+```
+
+**Pre-requisite:** the synthetic team-coherence-drift signal must be seeded (`scripts/seed-demo.js` writes it as Signal 6). Or pipe a real (anonymized) 1:1 into the task.
+
+**Expected:**
+- Analyst → COMPLETE, structured read of the signal divergence pattern (3-week disengagement + IP-adjacent access request)
+- SDR → REFUSED, "this isn't outreach, route to the Analyst"
+- Auditor → either flags drift with named threshold OR refuses to make the judgment without more signal
+
+**The demo voice-over for this run:**
+> "Same three agents. Different surface. Founders eventually hire teams. The same bounded-refusal architecture catches coherence drift in collaborators — the Snowden / Hansen problem at the seed. Three of these signals don't trigger anything. Five of them and the Auditor escalates."
+
+**Why this matters for judges:** Two of the three memory-layer judges (Alex Newman, Nishkarsh) build infrastructure that *could* host this kind of organizational read. Mentioning the wedge expansion to org-level coherence is a "and one more thing" moment for the technical-investment-pattern audience. **Don't lead with this — it's the surprise reveal.**
+
 ---
 
 ## Backup plan if something fails on stage

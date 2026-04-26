@@ -107,10 +107,18 @@ function App({ task }) {
 }
 
 function Header({ task, mode, vaultId }) {
+  // Sacred-geometry inspired sigil — three-fold (one agent per stroke)
+  // Renders as a calm visual anchor without religious or metaphysical framing.
+  const sigil = "◇  ◆  ◇";
   return h(
     Box,
     { flexDirection: "column", borderStyle: "round", borderColor: "gray", paddingX: 1 },
-    h(Text, { color: "white", bold: true }, "Liminal Agents — agency-priced work, bounded refusal"),
+    h(
+      Box,
+      { justifyContent: "space-between" },
+      h(Text, { color: "white", bold: true }, "Liminal Agents — bounded refusal, agency-priced work"),
+      h(Text, { color: "gray", dimColor: true }, sigil),
+    ),
     h(Text, { color: "gray", dimColor: true }, `task: ${task}`),
     h(Text, { color: "gray", dimColor: true },
       `mode: ${mode || "…"}   vault: ${vaultId ? vaultId.slice(0, 8) : "…"}`),
