@@ -27,6 +27,106 @@ if (!taskRaw) {
   process.exit(1);
 }
 
+// URL pre-fetch: if the task contains a URL, fetch its content (homepage HTML
+// stripped to text) and pass it as context to the agents. This lets the
+// Analyst do real teardowns of sites the model doesn't know, instead of
+// refusing-to-fabricate (which is correct behavior but a weaker demo).
+//
+// Limits: 60KB max body, 5s timeout, only http/https. If fetch fails, the
+// agents proceed without context and the Analyst correctly refuses to
+// fabricate. Refusal-on-failure is also a valid demo beat — PPA #4.
+const URL_RE = /https?:\/\/[^\s)"']+/g;
+async function fetchUrlContext(text) {
+  const urls = text.match(URL_RE) || [];
+  if (urls.length === 0) return null;
+  const url = urls[0]; // first URL only
+  try {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 5000);
+    const res = await fetch(url, {
+      signal: ac.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return { url, error: `http ${res.status}` };
+    const html = (await res.text()).slice(0, 60_000);
+    const text = stripHtml(html).slice(0, 8_000);
+    return { url, text, status: res.status };
+  } catch (err) {
+    return { url, error: err.message };
+  }
+}
+
+function stripHtml(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Detect domain references like "cofeld.com" without http:// — let the user
+// type teardowns naturally. Same fetch path; we just prepend https://.
+const BARE_DOMAIN_RE = /\b(?<!\.)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)\b/gi;
+const COMMON_TLDS = new Set([
+  "com", "io", "ai", "co", "app", "dev", "net", "org", "tech", "xyz",
+  "so", "to", "me", "us", "uk", "in", "sh", "page", "site", "tools", "build",
+]);
+
+async function maybeFetchBareDomain(text) {
+  if (URL_RE.test(text)) return null; // already handled by URL fetch
+  const matches = [...text.matchAll(BARE_DOMAIN_RE)].map((m) => m[1].toLowerCase());
+  for (const m of matches) {
+    const tld = m.split(".").pop();
+    if (COMMON_TLDS.has(tld)) {
+      try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 5000);
+        const res = await fetch(`https://${m}`, {
+          signal: ac.signal,
+          redirect: "follow",
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+          },
+        });
+        clearTimeout(timer);
+        if (!res.ok) return { url: `https://${m}`, error: `http ${res.status}` };
+        const html = (await res.text()).slice(0, 60_000);
+        const text = stripHtml(html).slice(0, 8_000);
+        return { url: `https://${m}`, text, status: res.status };
+      } catch (err) {
+        return { url: `https://${m}`, error: err.message };
+      }
+    }
+  }
+  return null;
+}
+
+const fetched = (await fetchUrlContext(taskRaw)) || (await maybeFetchBareDomain(taskRaw));
+const fetchedContext = fetched && fetched.text
+  ? `URL fetched: ${fetched.url}\n\nPage content (first 8KB):\n${fetched.text}`
+  : fetched && fetched.error
+    ? `URL fetch failed: ${fetched.url} — ${fetched.error}. Agents should refuse to fabricate.`
+    : null;
+
 const db = openVault();
 const now = Date.now();
 
@@ -52,7 +152,7 @@ db.prepare(
 
 try {
   const { client, mode } = makeClientOrExit();
-  const byName = await runAllAgents(client, taskRaw, null);
+  const byName = await runAllAgents(client, taskRaw, fetchedContext);
 
   const analystText = byName["Analyst"] || "";
   const sdrText = byName["SDR"] || "";
@@ -71,6 +171,9 @@ try {
         signal_id: signalId,
         task: taskRaw,
         anthropic_mode: mode,
+        fetched: fetched
+          ? { url: fetched.url, ok: !fetched.error, bytes: fetched.text?.length || 0 }
+          : null,
         analyst: { interpretation: analystText, refused: detectRefusal(analystText) },
         sdr: { interpretation: sdrText, refused: detectRefusal(sdrText) },
         auditor: { interpretation: auditorText, refused: detectRefusal(auditorText) },
