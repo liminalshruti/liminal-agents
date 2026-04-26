@@ -9,13 +9,20 @@
 
 ## Pre-flight checklist (Sat 5–6 PM PT)
 
-- [ ] `export ANTHROPIC_API_KEY=sk-ant-api03-...`
-- [ ] `export LIMINAL_VAULT_DIR=/tmp/lim-demo-recording` (fresh dir, NOT real vault)
+**Fastest path — one command:**
+```bash
+source scripts/demo.sh
+```
+This sets up the temp vault, seeds it, exports the env, and prints the three demo commands ready to run. **Note: must be `source`d (not `bash scripts/demo.sh`) so the env stays in your shell.**
+
+**Manual path (if `source` doesn't fit your workflow):**
+- [ ] `export ANTHROPIC_API_KEY=sk-ant-api03-...` (or use the CLI fallback — `claude setup-token`)
+- [ ] `export LIMINAL_VAULT_DIR=$(mktemp -d -t lim-demo-XXXXX)` (fresh dir, NEVER the real `~/Library/Application Support/Liminal`)
 - [ ] `export LIMINAL_VAULT_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")`
-- [ ] `node scripts/seed-demo.js` — confirm 5 signals seeded
+- [ ] `node scripts/seed-demo.js` — confirm 5 signals seeded across 5 sources
 - [ ] Run each TUI invocation once as a dry-run (cache the model behavior, confirm timing)
 - [ ] Clear terminal, set comfortable font size for screen recording
-- [ ] Open tmux session: `tmux new -s demo`
+- [ ] Open tmux session if recording with split panes: `tmux new -s demo`
 
 ---
 
@@ -59,15 +66,23 @@
 
 **Command:**
 ```bash
-node bin/liminal-tui.js "competitive teardown of perplexity.ai"
+node bin/liminal-tui.js "competitive teardown of granola.ai"
 ```
 
-**Why this task:** Perplexity is a real, public, well-known company. Model has good context. Analyst will produce a structured teardown with named comparables (e.g., Google, Anthropic, You.com, Brave, Kagi). Response time ~5–8s in API mode.
+**Why this task:** Granola is the meta-tool the judges are using to capture this hackathon's notes. The Analyst produces a real fetched-and-grounded teardown naming their $125M Series C, three competitive vectors (Otter/Fireflies, Notion/Linear/Asana, Apple/Google), and the actual moat thesis ("transcription is the wedge, accumulated meeting context is the moat"). **Verified in CLI mode at ~30s; API mode should land at 5-10s.** The judges will recognize this as a legitimate teardown of a tool they know intimately.
 
 **Expected:**
-- Analyst → COMPLETE, 3-4 paragraph structured teardown
+- Analyst → COMPLETE, 3-4 paragraph structured teardown grounded in fetched HTML
 - SDR → REFUSED, "That's the Analyst's lane"
 - Auditor → REFUSED, "I judge work; I don't produce teardowns"
+
+**Backup task** if granola.ai is unreachable on the recording machine:
+```bash
+node bin/liminal-tui.js "competitive teardown of cursor.sh"
+```
+Cursor is also a public, well-known dev tool. Substitute if needed.
+
+**Avoid:** `perplexity.ai` (returns HTTP 403 to default User-Agent — the SSRF guard's browser UA helps but Cloudflare bot detection is aggressive).
 
 ### Run 2 — SDR in lane
 
