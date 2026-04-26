@@ -24,11 +24,17 @@ const RUN_SCRIPT = path.join(here, "..", "skills", "agency", "run.js");
 
 const h = React.createElement;
 
+// Item #5: tightened lane copy — "the X lane" pattern. Repetition makes the
+// bounded-domain claim audible. Reads cleaner under the agent name.
 const AGENTS = [
-  { name: "Analyst", lane: "diligence · teardowns · research", color: "cyan" },
-  { name: "SDR", lane: "outreach · cold email · move", color: "yellow" },
-  { name: "Auditor", lane: "judges readiness · names gaps", color: "magenta" },
+  { name: "Analyst", lane: "the diligence lane", color: "cyan" },
+  { name: "SDR", lane: "the outreach lane", color: "yellow" },
+  { name: "Auditor", lane: "the judgment lane", color: "magenta" },
 ];
+
+// Stagger interval for the post-completion state transitions. Item #1.
+// Refusals fire first to create the "wait — it refused?" beat on camera.
+const STAGGER_MS = 600;
 
 const STATUS_IDLE = "IDLE";
 const STATUS_ACTIVE = "ACTIVE";
@@ -76,11 +82,25 @@ function App({ task }) {
           else next[a.name] = STATUS_ERROR;
           outs[a.name] = slot?.interpretation || "";
         }
-        setStatus(next);
-        setOutputs(outs);
-        setVaultId(j.vault_id);
-        setMode(j.anthropic_mode);
-        setDone(true);
+
+        // Item #1: stagger state transitions so the refusal beat lands first.
+        // Refusals are the demo punchline — they should hit before the
+        // completed agents fill in. Fires every 600ms.
+        const refusedFirst = AGENTS.filter((a) => next[a.name] === STATUS_REFUSED);
+        const completedAfter = AGENTS.filter((a) => next[a.name] !== STATUS_REFUSED);
+        const sequence = [...refusedFirst, ...completedAfter];
+
+        sequence.forEach((a, i) => {
+          setTimeout(() => {
+            setStatus((s) => ({ ...s, [a.name]: next[a.name] }));
+            setOutputs((o) => ({ ...o, [a.name]: outs[a.name] }));
+          }, i * STAGGER_MS);
+        });
+        setTimeout(() => {
+          setVaultId(j.vault_id);
+          setMode(j.anthropic_mode);
+          setDone(true);
+        }, sequence.length * STAGGER_MS);
       } catch (e) {
         setErrMsg(`parse error: ${e.message}\nraw: ${stdout.slice(0, 400)}`);
         setDone(true);
@@ -92,6 +112,13 @@ function App({ task }) {
     Box,
     { flexDirection: "column", padding: 1 },
     h(Header, { task, mode, vaultId }),
+    // Item #4: subtle vertical rhythm separator. Brand-coherent (matches the
+    // sigil's restraint) — the eye gets a "now the work starts" cue.
+    h(
+      Box,
+      { marginTop: 1, justifyContent: "center" },
+      h(Text, { color: "gray", dimColor: true }, "·   ·   ·"),
+    ),
     h(Box, { flexDirection: "column", marginTop: 1 },
       ...AGENTS.map((a) =>
         h(AgentPane, {
@@ -136,7 +163,10 @@ function AgentPane({ agent, status, output }) {
     Box,
     {
       flexDirection: "column",
-      borderStyle: "single",
+      // Item #2: REFUSED gets a double border so the refusal beat is
+      // unmistakable in a single screenshot. Refusal is the demo punchline;
+      // it earns visual emphasis.
+      borderStyle: status === STATUS_REFUSED ? "double" : "single",
       borderColor: agent.color,
       paddingX: 1,
       marginTop: 1,
@@ -148,6 +178,20 @@ function AgentPane({ agent, status, output }) {
       h(Text, { color: statusColor, bold: true }, status),
     ),
     h(Text, { color: "gray", dimColor: true }, agent.lane),
+    // Item #2: 1-line REFUSED callout above the refusal text. Boxed in yellow
+    // so a single freeze-frame on the refusal carries the entire claim.
+    status === STATUS_REFUSED && output
+      ? h(
+          Box,
+          {
+            marginTop: 1,
+            paddingX: 1,
+            borderStyle: "single",
+            borderColor: "yellow",
+          },
+          h(Text, { color: "yellow", bold: true }, "↩  REFUSED — out of lane"),
+        )
+      : null,
     output
       ? h(Box, { marginTop: 1 },
         h(Text,
@@ -175,7 +219,9 @@ function Footer({ vaultId, errMsg }) {
   }
   return h(Box, { marginTop: 1, flexDirection: "column" },
     h(Text, { color: "gray" }, `vault: deliberation ${vaultId} stored. /history shows the record.`),
-    h(Text, { color: "gray", dimColor: true }, "the record is the moat."),
+    // Item #3: replace soft "the record is the moat" with the sharper Apr 25
+    // demo-script line. Two strongest claims in one freeze-frame.
+    h(Text, { color: "gray", dimColor: true }, "refusal is the feature. the record is the moat."),
   );
 }
 
