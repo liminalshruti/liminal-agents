@@ -113,7 +113,7 @@ test("correction tag list has exactly nine tags and validates strictly", () => {
 });
 
 test("agent names are the three bounded roles", () => {
-  assert.deepEqual(AGENT_NAMES, ["Architect", "Witness", "Contrarian"]);
+  assert.deepEqual(AGENT_NAMES, ["Analyst", "SDR", "Auditor"]);
 });
 
 test("writing a correction via db enforces referential shape", async () => {

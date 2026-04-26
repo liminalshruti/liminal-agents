@@ -16,7 +16,7 @@
 
 import { openVault } from "../../lib/vault/db.js";
 import { newId } from "../../lib/vault/ids.js";
-import { runAllAgents, OPUS_MODEL } from "../../lib/agents/index.js";
+import { runAllAgents, OPUS_MODEL, INTROSPECTIVE_AGENTS } from "../../lib/agents/index.js";
 import { makeClientOrExit } from "../../lib/anthropic-client.js";
 
 const args = parseArgs(process.argv.slice(2));
@@ -78,7 +78,11 @@ const contextForAgents = threads
   .map((t, i) => `Thread ${i + 1}: ${t.label} — ${t.summary}`)
   .join("\n");
 
-const byName = await runAllAgents(client, stateForAgents, contextForAgents);
+// /close is end-of-day synthesis on today's signals — same introspective
+// substrate as /check. Pass Architect/Witness/Contrarian explicitly.
+const byName = await runAllAgents(client, stateForAgents, contextForAgents, {
+  agents: INTROSPECTIVE_AGENTS,
+});
 
 const deliberationId = newId();
 const now = Date.now();

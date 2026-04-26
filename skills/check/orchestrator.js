@@ -11,7 +11,7 @@
 
 import { openVault } from "../../lib/vault/db.js";
 import { newId } from "../../lib/vault/ids.js";
-import { runAllAgents } from "../../lib/agents/index.js";
+import { runAllAgents, INTROSPECTIVE_AGENTS } from "../../lib/agents/index.js";
 import { makeClientOrExit } from "../../lib/anthropic-client.js";
 
 const inputRaw = process.argv[2];
@@ -91,7 +91,13 @@ db.prepare(
 
 try {
   const { client } = makeClientOrExit();
-  const byName = await runAllAgents(client, userState, userContext);
+  // /check is the original Liminal substrate — Architect/Witness/Contrarian
+  // reading user state across structural, somatic, and inversion registers.
+  // Pass the introspective set explicitly to prevent accidental drift to the
+  // agency set's B2B voice.
+  const byName = await runAllAgents(client, userState, userContext, {
+    agents: INTROSPECTIVE_AGENTS,
+  });
 
   db.prepare(
     `UPDATE deliberations SET architect_view = ?, witness_view = ?, contrarian_view = ? WHERE id = ?`,

@@ -17,7 +17,7 @@
     "id": { "type": "string", "format": "uuid" },
     "deliberation_id": { "type": "string", "format": "uuid" },
     "timestamp": { "type": "integer" },
-    "agent": { "type": "string", "enum": ["Architect", "Witness", "Contrarian"] },
+    "agent": { "type": "string", "enum": ["Analyst", "SDR", "Auditor", "Architect", "Witness", "Contrarian"] },
     "tag": {
       "type": ["string", "null"],
       "enum": [
