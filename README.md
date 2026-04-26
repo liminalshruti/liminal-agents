@@ -36,6 +36,8 @@ A Claude Code plugin built for the [**AI Agent Economy Hackathon**](https://luma
 - **Correction stream.** When you push back on a read, the correction is first-party data.
 - **Ships as a Claude Code plugin.** `claude -p` OAuth or `ANTHROPIC_API_KEY`.
 
+**Jump to:** [Live runs](#what-this-looks-like-in-practice) · [Quickstart](#quickstart) · [Rubric scoring](#how-it-scores-against-the-agenthansa-rubric) · [Architecture](#architecture) · [Skills](#skills) · [Hackathon judges](#hackathon-context)
+
 | Agent | In lane | Refuses (and names) |
 |---|---|---|
 | **Analyst** | diligence, competitive teardowns, market research, data enrichment | outreach (→ SDR) · ship/no-ship calls (→ Auditor) |
@@ -52,7 +54,10 @@ Two real runs against a fresh seeded vault, no edits, ~30s each via `claude -p` 
 
 ### Run 1 — `competitive teardown of granola.ai`
 
-The Analyst pre-fetched `https://granola.ai` (1,500 bytes after stripping HTML), then produced:
+The Analyst pre-fetched `https://granola.ai` (1,500 bytes after stripping HTML), then produced a 4-paragraph structured teardown naming Granola's $125M Series C, the moat thesis (corpus, not transcription), competitive splits against Otter / Fireflies / Tuesday.ai, and the OS-incumbent risk.
+
+<details>
+<summary><strong>Read the full Analyst teardown ↓</strong></summary>
 
 > Granola is winning the meeting-notes category by collapsing the category itself: it is not a recorder, not a transcription tool, and not a CRM enrichment layer — it is a notepad that happens to listen. The $125M Series C confirms the bet: distribution through individual ICs in back-to-back meetings, then expansion into company-wide context. The defensible asset is the accumulated meeting corpus per user, not the transcription pipeline.
 >
@@ -61,6 +66,8 @@ The Analyst pre-fetched `https://granola.ai` (1,500 bytes after stripping HTML),
 > The Series C language — "put your company's context to work" — signals the next move: org-level memory and agentic chat over the meeting graph. This is where Granola becomes hard to displace and where the moat compounds. Every meeting captured is training data for a per-company retrieval layer no competitor can replicate without years of usage. The risk is the same risk every notes app faces: Apple, Google, and Microsoft can ship a "good enough" version inside the OS or productivity suite, and the single-purpose tool gets squeezed.
 >
 > The implication is that Granola's defensibility lives in the writing experience and the corpus, not the AI — anyone teardown-ing them should study the editor, not the transcription stack.
+
+</details>
 
 In the same run, the other two agents refused with named lanes:
 
@@ -165,7 +172,7 @@ The TUI renders three color-coded agent panes (cyan / yellow / magenta). The in-
 
 **Bounded agents.** System prompts hardcoded in `lib/agents/*.js`. Each agent's prompt names its domain, anti-domain, and the exact refusal template. Agents **never read prior corrections** — by design. The correction loop does not converge. The record is the moat, not the agents.
 
-**Three-agent orchestrator.** `skills/agency/run.js` runs all three agents in parallel against one task via `Promise.all`. URL pre-fetch lives here too: detects URLs and bare domains in the task, fetches the homepage with SSRF guards (private-IP blocking, manual redirect, scheme allowlist), strips HTML to ~8KB of text, and passes it as `context` to the agents. SSRF mitigation in `safeFetch()` blocks RFC1918 ranges, loopback, link-local 169.254/16 (cloud metadata), IPv6 ULA, and DNS-rebinding attempts. See PR #9.
+**Three-agent orchestrator.** `skills/agency/run.js` runs all three agents **in parallel** against one task via `Promise.all`. URL pre-fetch lives here too: detects URLs and bare domains in the task, fetches the homepage with **SSRF guards** (private-IP blocking, manual redirect, scheme allowlist), strips HTML to ~8KB of text, and passes it as `context` to the agents. SSRF mitigation in `safeFetch()` blocks **RFC1918 ranges, loopback, link-local 169.254/16 (cloud metadata), IPv6 ULA, and DNS-rebinding attempts**. See PR #9.
 
 **Canonical correction tags** (frozen at v1):
 
