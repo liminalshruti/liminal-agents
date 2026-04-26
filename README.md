@@ -199,7 +199,14 @@ This hackathon ships one slice (B2B agency-priced work). The architecture suppor
 
 ## Skills
 
-### `/agency` — three-agent B2B run
+| Skill | What it does | Surface |
+|---|---|---|
+| **`/agency`** | Three-agent B2B run. In-lane agent produces; others refuse and name the correct agent. | The AgentHansa-aligned surface. |
+| **`/check`** | Three forced-choice questions for a quick state snapshot. | Substrate surface. |
+| **`/close`** | Synthesizes the day's signals (Granola meetings, Claude Code messages, git commits) into one paragraph + three threads, then runs the agents over the synthesis. | Substrate surface. |
+| **`/history`** | Shows the landed-vs-corrected matrix per agent. | Substrate surface. |
+
+### `/agency` examples
 
 ```
 /liminal-agents:agency competitive teardown of granola.ai
@@ -207,15 +214,14 @@ This hackathon ships one slice (B2B agency-priced work). The architecture suppor
 /liminal-agents:agency is this email ready to send: 'Subject: hello, Body: ...'
 ```
 
-The in-lane agent produces. The others refuse and name the correct agent.
-
-### `/check`, `/close`, `/history` — substrate surfaces
-
-`/check` runs three forced-choice questions for a quick state snapshot. `/close` synthesizes the day's signals (Granola meetings, Claude Code messages, git commits) into one paragraph and three threads, then runs the agents over the synthesis. `/history` shows the landed-vs-corrected matrix per agent. All three are kept for backward compatibility with the substrate; `/agency` is the AgentHansa-aligned surface.
-
 ### Daemon (background)
 
-`liminal-substrated` polls every 5 minutes. Real sources: `claude-code` (user messages from `~/.claude/projects/**/*.jsonl`), `git` (commits in configured repos), `granola` (meeting notes + transcripts from `~/Library/Application Support/Granola/cache-v6.json`). Stubs: `calendar`, `obsidian`, `apple_reminders`. Thread detection runs each tick via Haiku 4.5; evening close fires at 18:30 local if ≥5 signals landed.
+`liminal-substrated` polls every 5 minutes.
+
+- **Real sources:** `claude-code` (user messages from `~/.claude/projects/**/*.jsonl`), `git` (commits in configured repos), `granola` (meeting notes + transcripts from `~/Library/Application Support/Granola/cache-v6.json`).
+- **Stubs:** `calendar`, `obsidian`, `apple_reminders`.
+- **Thread detection:** every tick via Haiku 4.5.
+- **Evening close:** fires at 18:30 local if ≥5 signals landed.
 
 > **Privacy note.** The Granola cache contains commingled personal/operational content. The hackathon demo uses **synthetic seed transcripts only** (`scripts/seed-demo.js`) — never the real cache. Production-grade source filtering is a post-hackathon design problem, explicitly named in `SPEC.md` §4.2.
 
