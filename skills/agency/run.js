@@ -32,20 +32,80 @@ if (!taskRaw) {
 // Analyst do real teardowns of sites the model doesn't know, instead of
 // refusing-to-fabricate (which is correct behavior but a weaker demo).
 //
-// Limits: 60KB max body, 5s timeout, only http/https. If fetch fails, the
-// agents proceed without context and the Analyst correctly refuses to
-// fabricate. Refusal-on-failure is also a valid demo beat — PPA #4.
-const URL_RE = /https?:\/\/[^\s)"']+/g;
-async function fetchUrlContext(text) {
-  const urls = text.match(URL_RE) || [];
-  if (urls.length === 0) return null;
-  const url = urls[0]; // first URL only
+// Limits: 60KB max body, 5s timeout, only http/https, no private IPs. If fetch
+// fails, the agents proceed without context and the Analyst correctly refuses
+// to fabricate. Refusal-on-failure is also a valid demo beat — PPA #4.
+//
+// SSRF mitigation: hostnames resolving to private IP ranges (RFC1918, link-
+// local, loopback, IPv4/IPv6 unique-local) are blocked. This prevents the
+// agent from being weaponized to probe internal infrastructure when the
+// service is deployed (e.g. on a hackathon judging cloud instance) and a
+// user types `/agency teardown of http://169.254.169.254/latest/meta-data/`.
+import dns from "node:dns/promises";
+
+function isPrivateIPv4(ip) {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) return false;
+  const [a, b] = parts;
+  return (
+    a === 10 ||
+    a === 127 ||
+    a === 0 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    a >= 224 // multicast + reserved
+  );
+}
+
+function isPrivateIPv6(ip) {
+  const lower = ip.toLowerCase();
+  return (
+    lower === "::1" ||
+    lower === "::" ||
+    lower.startsWith("fc") ||
+    lower.startsWith("fd") ||
+    lower.startsWith("fe80:") ||
+    lower.startsWith("ff") ||
+    lower.startsWith("::ffff:") // mapped IPv4 — re-check the v4 part
+  );
+}
+
+async function safeFetch(rawUrl) {
+  let parsed;
   try {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 5000);
-    const res = await fetch(url, {
+    parsed = new URL(rawUrl);
+  } catch {
+    return { error: "invalid_url" };
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { error: "non_http_scheme" };
+  }
+  const host = parsed.hostname;
+  // Reject literal private IPs in the URL itself
+  if (isPrivateIPv4(host) || isPrivateIPv6(host)) {
+    return { error: "private_ip_blocked" };
+  }
+  // Resolve hostname and reject if any A/AAAA record is private
+  try {
+    const records = await dns.lookup(host, { all: true });
+    for (const r of records) {
+      if (r.family === 4 && isPrivateIPv4(r.address)) {
+        return { error: "private_ip_resolved_blocked" };
+      }
+      if (r.family === 6 && isPrivateIPv6(r.address)) {
+        return { error: "private_ip_resolved_blocked" };
+      }
+    }
+  } catch (err) {
+    return { error: `dns_failed: ${err.code || err.message}` };
+  }
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 5000);
+  try {
+    const res = await fetch(parsed.toString(), {
       signal: ac.signal,
-      redirect: "follow",
+      redirect: "manual", // do NOT follow — would re-route around our IP check
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -54,13 +114,26 @@ async function fetchUrlContext(text) {
       },
     });
     clearTimeout(timer);
-    if (!res.ok) return { url, error: `http ${res.status}` };
+    if (res.status >= 300 && res.status < 400) {
+      return { error: `http_${res.status}_redirect_blocked` };
+    }
+    if (!res.ok) return { error: `http ${res.status}` };
     const html = (await res.text()).slice(0, 60_000);
-    const text = stripHtml(html).slice(0, 8_000);
-    return { url, text, status: res.status };
+    return { html, status: res.status };
   } catch (err) {
-    return { url, error: err.message };
+    clearTimeout(timer);
+    return { error: err.message };
   }
+}
+
+const URL_RE = /https?:\/\/[^\s)"']+/g;
+async function fetchUrlContext(text) {
+  const urls = text.match(URL_RE) || [];
+  if (urls.length === 0) return null;
+  const url = urls[0];
+  const result = await safeFetch(url);
+  if (result.error) return { url, error: result.error };
+  return { url, text: stripHtml(result.html).slice(0, 8_000), status: result.status };
 }
 
 function stripHtml(html) {
@@ -94,27 +167,10 @@ async function maybeFetchBareDomain(text) {
   for (const m of matches) {
     const tld = m.split(".").pop();
     if (COMMON_TLDS.has(tld)) {
-      try {
-        const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), 5000);
-        const res = await fetch(`https://${m}`, {
-          signal: ac.signal,
-          redirect: "follow",
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-          },
-        });
-        clearTimeout(timer);
-        if (!res.ok) return { url: `https://${m}`, error: `http ${res.status}` };
-        const html = (await res.text()).slice(0, 60_000);
-        const text = stripHtml(html).slice(0, 8_000);
-        return { url: `https://${m}`, text, status: res.status };
-      } catch (err) {
-        return { url: `https://${m}`, error: err.message };
-      }
+      const url = `https://${m}`;
+      const result = await safeFetch(url);
+      if (result.error) return { url, error: result.error };
+      return { url, text: stripHtml(result.html).slice(0, 8_000), status: result.status };
     }
   }
   return null;
