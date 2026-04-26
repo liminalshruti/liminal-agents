@@ -14,19 +14,10 @@
  * Agents read today's synthesis only. They do not read prior corrections.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { openVault } from "../../lib/vault/db.js";
 import { newId } from "../../lib/vault/ids.js";
 import { runAllAgents, OPUS_MODEL } from "../../lib/agents/index.js";
-
-const API_KEY =
-  process.env.ANTHROPIC_API_KEY ||
-  process.env.CLAUDE_PLUGIN_OPTION_ANTHROPIC_API_KEY;
-
-if (!API_KEY) {
-  console.error("ERROR: ANTHROPIC_API_KEY not set.");
-  process.exit(1);
-}
+import { makeClientOrExit } from "../../lib/anthropic-client.js";
 
 const args = parseArgs(process.argv.slice(2));
 const nowMs = Number(args["today-ms"]) || Date.now();
@@ -77,7 +68,7 @@ const signalPayload = signals.map((s) => {
   };
 });
 
-const client = new Anthropic({ apiKey: API_KEY });
+const { client } = makeClientOrExit();
 
 const synthesis = await synthesizeDay(client, signalPayload);
 const { signal_summary, threads } = synthesis;

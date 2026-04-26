@@ -21,6 +21,7 @@
     "tui": "node bin/liminal-tui.js",
     "agency": "node skills/agency/run.js",
     "seed:demo": "node scripts/seed-demo.js",
+    "backfill": "node scripts/backfill.js",
     "daemon:install": "bash scripts/install-daemon.sh",
     "daemon:uninstall": "bash scripts/uninstall-daemon.sh",
     "test": "node --test test/*.test.js",
