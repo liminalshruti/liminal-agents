@@ -190,20 +190,30 @@ try {
 }
 
 /**
- * Lightweight refusal heuristic: an agent has refused if it explicitly
- * names another agent's lane in a refusal-shaped sentence. Each agent's
- * system prompt instructs them to refuse with phrasing like
- *   "That's the SDR's lane. I do the research; the SDR runs the move."
- * so we look for the name+lane pattern. Heuristic only — not a hard
- * gate. The TUI uses this to color the refusal pane differently.
+ * Refusal detector — structural, not heuristic.
+ *
+ * Each agent's prompt declares a strict REFUSAL PROTOCOL: when out of lane,
+ * the model emits exactly two lines beginning with "REFUSE: <agent name>".
+ * Detection is therefore a prefix check on the first non-blank line.
+ *
+ * Replaces an earlier pattern-matching detector that searched anywhere in
+ * the output for phrases like "the SDR's lane" — which produced false
+ * positives when an in-lane agent legitimately mentioned another agent's
+ * lane as part of its own work (e.g., the Auditor saying "drafting outreach
+ * is the SDR's job" inside its judgment of a draft). Structural marker
+ * makes refusal a decision the model emits explicitly, not a phrase the
+ * orchestrator infers.
+ *
+ * If the prompt-imposed protocol drifts (REFUSE embedded mid-paragraph,
+ * different casing), the detector errs toward NOT-refused. Better to
+ * mislabel a refusal as work than to mislabel work as refusal — the TUI's
+ * REFUSED pane is the loud one, and false positives there are the demo
+ * failure mode this fix is closing.
  */
 function detectRefusal(text) {
+  // Inlined regex (not module-level const) because `function` declarations
+  // hoist but `const` does not — this function is called from the JSON
+  // output above, so any const declared here would TDZ-error at runtime.
   if (!text) return false;
-  const t = text.toLowerCase();
-  const lanePatterns = [
-    /that['']s the (analyst|sdr|auditor)['']?s? lane/,
-    /the (analyst|sdr|auditor) (does|runs|judges|owns)/,
-    /that['']s (an? )?(analyst|sdr|auditor)['']?s? (call|job|work)/,
-  ];
-  return lanePatterns.some((re) => re.test(t));
+  return /^\s*REFUSE\s*:/.test(text);
 }

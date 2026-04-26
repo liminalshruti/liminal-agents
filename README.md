@@ -16,49 +16,56 @@ A Claude Code plugin built for the [**AI Agent Economy Hackathon**](https://luma
 
 ## What this looks like in practice
 
-Two real runs against a fresh seeded vault, no edits, ~30s each via `claude -p` OAuth.
+Two real runs against a fresh seeded vault, no edits, ~30s each via `claude -p` OAuth. Outputs verbatim from `node skills/agency/run.js`.
 
 ### Run 1 — `competitive teardown of granola.ai`
 
-The Analyst pre-fetched `https://granola.ai` (1,528 bytes after stripping), then produced:
+The Analyst pre-fetched `https://granola.ai` (1,500 bytes after stripping HTML), then produced:
 
-> **Granola is winning the AI-notepad category by being the only tool that respects the meeting itself** — it augments human notes instead of replacing them with a bot, and that positioning just earned a $125M Series C.
+> Granola is winning the meeting-notes category by collapsing the category itself: it is not a recorder, not a transcription tool, and not a CRM enrichment layer — it is a notepad that happens to listen. The $125M Series C confirms the bet: distribution through individual ICs in back-to-back meetings, then expansion into company-wide context. The defensible asset is the accumulated meeting corpus per user, not the transcription pipeline.
 >
-> The product wedge is narrow and deliberate: an Apple Notes-style pad that transcribes in the background, then enhances what the human already wrote post-meeting. No bot joins the call. This sidesteps the entire Otter / Fireflies / Fathom category — those tools center the recording; Granola centers the operator. The landing copy ("for people in back-to-back meetings") targets a specific ICP: PMs, founders, execs, sales leaders running 6+ meetings/day who already take notes and need leverage, not replacement.
+> The product surface is deliberately narrow. Three pillars on the homepage — Notepad, Chat, iPhone — and the demo is a single intro-call screenshot. Compare this to Otter, Fireflies, Fathom, tl;dv, all of which lead with feature matrices (transcription accuracy, integrations, summarization templates). Granola leads with a writing experience. That positioning lets them charge a premium and avoid the commodity transcription race to zero. The Tuesday.ai jab embedded in the demo screenshot ("$180 per employee per year, too expensive, too complex") is a direct competitive frame against incumbent enterprise note-takers.
 >
-> Competitive landscape splits three ways. **Bot-based transcribers** (Otter, Fireflies, Fathom, Read.ai) — commoditizing fast, fighting on accuracy and integrations. **Embedded meeting AI** (Zoom's in-call assistant, Google Meet Gemini, Teams Copilot) — free, default, good enough for most — this is Granola's existential threat. **Workspace-native AI** (Notion AI, Coda) — adjacent, not direct.
+> The Series C language — "put your company's context to work" — signals the next move: org-level memory and agentic chat over the meeting graph. This is where Granola becomes hard to displace and where the moat compounds. Every meeting captured is training data for a per-company retrieval layer no competitor can replicate without years of usage. The risk is the same risk every notes app faces: Apple, Google, and Microsoft can ship a "good enough" version inside the OS or productivity suite, and the single-purpose tool gets squeezed.
 >
-> **Implication:** Granola is a category-defining wedge with a clear expansion path, but the moat is brand and speed, not technology — anyone with $125M and a year can clone the notepad UX; the question is whether they convert single-seat lovers into org-wide context infrastructure before the platform incumbents zero out the standalone market.
+> The implication is that Granola's defensibility lives in the writing experience and the corpus, not the AI — anyone teardown-ing them should study the editor, not the transcription stack.
 
-In the same run:
+In the same run, the other two agents refused with named lanes:
 
-> **SDR (refused):** That's the Analyst's lane. I run the move; the Analyst does the homework.
->
-> **Auditor (refused):** Refused. This request asks for a competitive teardown — that's the Analyst's lane. I judge readiness; I don't produce analysis. Route to the Analyst for the Granola teardown. Bring it back to me when there's a draft to audit.
+> **SDR:**
+> REFUSE: Analyst
+> Competitive teardowns and market research are the Analyst's lane. I run outreach; the Analyst does the homework.
+
+> **Auditor:**
+> REFUSE: Analyst
+> Producing a competitive teardown is the Analyst's lane. Bring me the teardown and I'll tell you what's missing.
 
 ### Run 2 — `draft a cold email to Maya at Northstar Capital`
 
 The SDR was in lane this time. With Maya's investor-call notes already in the vault (synthetic seed), it produced:
 
-> **Subject:** Agentic-workspace moat — 30 min follow-up
+> Subject: 30 min on the agentic-workspace moat
 >
-> Maya —
+> Maya — following up on our exchange. The piece worth your time is the moat shape: bounded multi-agent deliberation plus a correction-stream substrate that compounds with use, not a wrapper that decays.
 >
-> Picking up the thread on agentic workspaces. The moat question you raised stuck with me: it's not the agents, it's the correction stream they generate.
+> Northstar's recent notes on workflow-native AI line up with where this is heading. I'd rather show you the substrate live than describe it — fifteen minutes is enough to see whether the thesis lands.
 >
-> I've got a working prototype that makes the data model inspectable in under five minutes. Worth showing rather than describing.
->
-> 30 min next week — Tuesday or Thursday afternoon? I'll send times if either works.
+> Open Tuesday or Thursday afternoon next week for 30 minutes? I'll send two times once you pick a day.
 >
 > Shruti
+> Liminal Space
 
-The Analyst refused (`That's the SDR's lane. I do the research; the SDR runs the move.`) and the Auditor declined to produce — but pre-loaded its audit criteria for when the draft comes back:
+The Analyst and Auditor both refused, with the Auditor pre-loading its audit criteria for when the draft comes back:
 
-> Not my lane. Drafting outreach is the SDR's job — I judge readiness, I don't produce the email.
->
-> Send this to the SDR. When a draft comes back, I'll audit it for: whether the moat claim is specific enough to warrant Maya's 30 minutes, whether the follow-up has a reason-to-believe beyond "we talked before," and whether the ask is calibrated to the relationship stage.
+> **Analyst:**
+> REFUSE: SDR
+> Drafting outreach is the SDR's lane. I do the research; the SDR runs the move.
 
-That last move — **the Auditor refusing to produce work but specifying what it would judge** — is what bounded multi-agent cooperation looks like in practice. Refusal isn't blocking; it's routing.
+> **Auditor:**
+> REFUSE: SDR
+> Drafting outreach is the SDR's lane. Bring me the draft and I'll tell you what's missing.
+
+That last move — **the Auditor refusing to produce, then routing the user toward what would make it useful next** — is what bounded multi-agent cooperation looks like in practice. Refusal isn't blocking; it's routing.
 
 ---
 
