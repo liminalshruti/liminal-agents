@@ -24,9 +24,9 @@ The Analyst pre-fetched `https://granola.ai` (1,528 bytes after stripping), then
 
 > **Granola is winning the AI-notepad category by being the only tool that respects the meeting itself** — it augments human notes instead of replacing them with a bot, and that positioning just earned a $125M Series C.
 >
-> The product wedge is narrow and deliberate: an Apple Notes-style pad that transcribes in the background, then enhances what the human already wrote post-meeting. No bot joins the call. This sidesteps the entire Otter / Fireflies / Fathom category — those tools optimize for the recording; Granola optimizes for the operator. The landing copy ("for people in back-to-back meetings") targets a specific ICP: PMs, founders, execs, sales leaders running 6+ meetings/day who already take notes and need leverage, not replacement.
+> The product wedge is narrow and deliberate: an Apple Notes-style pad that transcribes in the background, then enhances what the human already wrote post-meeting. No bot joins the call. This sidesteps the entire Otter / Fireflies / Fathom category — those tools center the recording; Granola centers the operator. The landing copy ("for people in back-to-back meetings") targets a specific ICP: PMs, founders, execs, sales leaders running 6+ meetings/day who already take notes and need leverage, not replacement.
 >
-> Competitive landscape splits three ways. **Bot-based transcribers** (Otter, Fireflies, Fathom, Read.ai) — commoditizing fast, fighting on accuracy and integrations. **Embedded meeting AI** (Zoom AI Companion, Google Meet Gemini, Teams Copilot) — free, default, good enough for most — this is Granola's existential threat. **Workspace-native AI** (Notion AI, Coda) — adjacent, not direct.
+> Competitive landscape splits three ways. **Bot-based transcribers** (Otter, Fireflies, Fathom, Read.ai) — commoditizing fast, fighting on accuracy and integrations. **Embedded meeting AI** (Zoom's in-call assistant, Google Meet Gemini, Teams Copilot) — free, default, good enough for most — this is Granola's existential threat. **Workspace-native AI** (Notion AI, Coda) — adjacent, not direct.
 >
 > **Implication:** Granola is a category-defining wedge with a clear expansion path, but the moat is brand and speed, not technology — anyone with $125M and a year can clone the notepad UX; the question is whether they convert single-seat lovers into org-wide context infrastructure before the platform incumbents zero out the standalone market.
 
@@ -210,7 +210,7 @@ Three of four judges build memory infrastructure for AI agents. **The vault's en
 
 - **Not the production product.** No onboarding, no signup, no payment.
 - **Not a customer-facing tool.** Local-only. No cloud APIs beyond Anthropic.
-- **Not a companion.** No attachment loop, no streaks, no wellness framing.
+- **Not an AI friend.** No attachment loop, no streaks, no self-help framing.
 - **Not advisory.** The system surfaces refusal and disagreement; the user decides what is true.
 
 ---
