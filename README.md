@@ -1,8 +1,40 @@
 # Liminal Agents
 
+```
+                              ◇  ◆  ◇
+
+      task ─────► ┌─────────────┬─────────────┬─────────────┐
+                  │   ANALYST   │     SDR     │   AUDITOR   │
+                  │  diligence  │  outreach   │  judgment   │
+                  ├─────────────┼─────────────┼─────────────┤
+                  │  COMPLETE   │  REFUSED    │  REFUSED    │
+                  │             │  → Analyst  │  → Analyst  │
+                  │  teardown.  │             │             │
+                  │  3 paras.   │             │             │
+                  │  fetched.   │             │             │
+                  └─────────────┴─────────────┴─────────────┘
+                                     │
+                                     ▼
+                          ┌─────────────────────┐
+                          │   vault (sqlcipher) │
+                          │   deliberation.v1   │
+                          │   correction.v1     │
+                          └─────────────────────┘
+
+           refusal is the feature.  the record is the moat.
+```
+
 > **Three bounded specialists that do agency-priced work locally. Each refuses out of lane and names the right agent. The vault keeps the record.**
 
 A Claude Code plugin built for the [**AI Agent Economy Hackathon**](https://luma.com/jmfpws97) — Topify AI / AgentHansa, Apr 25, 2026. Solo founders pay agencies $500/month for the same three things: diligence prep, cold outreach, and ship/no-ship reviews. Most AI agents hallucinate when out of depth. Liminal Agents are bounded — each one refuses work outside its lane and names the correct agent, by name.
+
+## TL;DR
+
+- **Three bounded agents.** Analyst, SDR, Auditor. Each one does one thing.
+- **Refusal as designed output.** The agent out of lane names the agent in lane.
+- **Local-first vault.** SQLCipher-encrypted. Every deliberation persists.
+- **Correction stream.** When you push back on a read, the correction is first-party data.
+- **Ships as a Claude Code plugin.** `claude -p` OAuth or `ANTHROPIC_API_KEY`.
 
 | Agent | In lane | Refuses (and names) |
 |---|---|---|
