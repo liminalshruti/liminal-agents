@@ -18,7 +18,7 @@
 
 import { openVault } from "../../lib/vault/db.js";
 import { newId } from "../../lib/vault/ids.js";
-import { runAllAgents } from "../../lib/agents/index.js";
+import { runAllAgents, AGENCY_AGENTS } from "../../lib/agents/index.js";
 import { makeClientOrExit } from "../../lib/anthropic-client.js";
 
 const taskRaw = process.argv.slice(2).join(" ").trim();
@@ -152,7 +152,12 @@ db.prepare(
 
 try {
   const { client, mode } = makeClientOrExit();
-  const byName = await runAllAgents(client, taskRaw, fetchedContext);
+  // /agency uses the B2B founder-ops set — Analyst/SDR/Auditor — which
+  // refuses out-of-lane via the strict REFUSE: protocol. Pass explicitly so
+  // a future change to the default agent set doesn't silently swap voices.
+  const byName = await runAllAgents(client, taskRaw, fetchedContext, {
+    agents: AGENCY_AGENTS,
+  });
 
   const analystText = byName["Analyst"] || "";
   const sdrText = byName["SDR"] || "";
