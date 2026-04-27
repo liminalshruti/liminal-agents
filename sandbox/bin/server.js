@@ -13,6 +13,7 @@ import {
   runReading,
 } from "../lib/orchestrator.js";
 import { seedDemoVault } from "../lib/seed.js";
+import { AGENT_KEYS, REGISTERS, agentsByRegister } from "../lib/agents/index.js";
 
 const app = new Hono();
 
@@ -93,6 +94,13 @@ app.get("/api/readings/:id", (c) => {
   let threads = [];
   try { snapshotIds = JSON.parse(row.snapshot_ids); } catch {}
   try { threads = JSON.parse(row.threads); } catch {}
+  const viewRows = db.prepare(
+    `SELECT agent_key, register, interpretation FROM agent_views WHERE reading_id = ?`,
+  ).all(id);
+  const agents = {};
+  for (const v of viewRows) {
+    agents[v.agent_key] = { key: v.agent_key, register: v.register, interpretation: v.interpretation };
+  }
   return c.json({
     reading_id: row.id,
     timestamp: row.timestamp,
@@ -100,9 +108,7 @@ app.get("/api/readings/:id", (c) => {
     snapshot_ids: snapshotIds,
     signal_summary: row.signal_summary,
     threads,
-    architect: { interpretation: row.architect_view },
-    witness: { interpretation: row.witness_view },
-    contrarian: { interpretation: row.contrarian_view },
+    agents,
     model: row.model,
     client_mode: row.client_mode,
     corrections,
@@ -116,8 +122,8 @@ app.post("/api/correction", async (c) => {
   if (!reading_id || !agent || !tag) {
     return c.json({ error: "need reading_id, agent, tag" }, 400);
   }
-  if (!["architect", "witness", "contrarian"].includes(agent)) {
-    return c.json({ error: "agent must be architect|witness|contrarian" }, 400);
+  if (!AGENT_KEYS.includes(agent)) {
+    return c.json({ error: `agent must be one of: ${AGENT_KEYS.join("|")}` }, 400);
   }
   if (!isValidTag(tag)) {
     return c.json({ error: `invalid tag. allowed: ${CORRECTION_TAGS.join(", ")}` }, 400);

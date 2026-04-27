@@ -4,9 +4,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DB_PATH = process.env.LIMINAL_DB || join(here, "..", "liminal.db");
+// New DB path for the 12-agent agency surface — leaves the legacy
+// 3-agent introspective DB undisturbed so users can still inspect old runs.
+const DEFAULT_DB_PATH = process.env.LIMINAL_DB || join(here, "..", "liminal-agency.db");
 
 let _db = null;
+
+const AGENT_KEYS_CHECK = "('analyst','researcher','forensic','sdr','closer','liaison','auditor','strategist','skeptic','operator','scheduler','bookkeeper')";
 
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS snapshots (
@@ -27,17 +31,24 @@ const SCHEMA_STATEMENTS = [
     snapshot_count INTEGER NOT NULL,
     signal_summary TEXT,
     threads TEXT,
-    architect_view TEXT,
-    witness_view TEXT,
-    contrarian_view TEXT,
     model TEXT,
     client_mode TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS readings_timestamp ON readings(timestamp DESC)`,
+  `CREATE INDEX IF NOT EXISTS readings_hash ON readings(snapshot_ids_hash)`,
+  `CREATE TABLE IF NOT EXISTS agent_views (
+    reading_id TEXT NOT NULL REFERENCES readings(id) ON DELETE CASCADE,
+    agent_key TEXT NOT NULL CHECK (agent_key IN ${AGENT_KEYS_CHECK}),
+    register TEXT NOT NULL,
+    interpretation TEXT NOT NULL,
+    PRIMARY KEY (reading_id, agent_key)
+  )`,
+  `CREATE INDEX IF NOT EXISTS agent_views_reading ON agent_views(reading_id)`,
+  `CREATE INDEX IF NOT EXISTS agent_views_register ON agent_views(register)`,
   `CREATE TABLE IF NOT EXISTS corrections (
     id TEXT PRIMARY KEY,
     reading_id TEXT NOT NULL REFERENCES readings(id) ON DELETE CASCADE,
-    agent TEXT NOT NULL CHECK (agent IN ('architect','witness','contrarian')),
+    agent TEXT NOT NULL CHECK (agent IN ${AGENT_KEYS_CHECK}),
     tag TEXT NOT NULL,
     note TEXT,
     timestamp INTEGER NOT NULL
@@ -53,15 +64,6 @@ export function openDb(path = DEFAULT_DB_PATH) {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   for (const stmt of SCHEMA_STATEMENTS) db.prepare(stmt).run();
-
-  // Migrate existing DBs that pre-date the snapshot_ids_hash column, then
-  // create the index unconditionally (covers both fresh and migrated DBs).
-  const cols = db.prepare(`PRAGMA table_info(readings)`).all().map((r) => r.name);
-  if (!cols.includes("snapshot_ids_hash")) {
-    db.prepare(`ALTER TABLE readings ADD COLUMN snapshot_ids_hash TEXT`).run();
-  }
-  db.prepare(`CREATE INDEX IF NOT EXISTS readings_hash ON readings(snapshot_ids_hash)`).run();
-
   _db = db;
   return db;
 }
