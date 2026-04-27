@@ -106,13 +106,36 @@ export async function runReading({ client, mode, model = OPUS_MODEL, useCache = 
     if (cached) return inflateCachedReading(db, cached);
   }
 
-  const synthesis = await synthesizeAcrossSnapshots(client, snapshots, model);
+  // Synthesis is fail-fast — agents need it as their input. If synthesis
+  // throws (network, auth, total API failure), the reading cannot proceed
+  // and we propagate. JSON-parse failures inside synthesis return a
+  // graceful empty-summary fallback (logged in synthesis.js); agents will
+  // still run against the truncated context.
+  let synthesis;
+  try {
+    synthesis = await synthesizeAcrossSnapshots(client, snapshots, model);
+  } catch (e) {
+    console.error(`[runReading] synthesis failed: ${e.message}`);
+    throw e;
+  }
+
   const stateForAgents = synthesis.signal_summary || `${snapshots.length} snapshots`;
   const contextForAgents = synthesis.threads
     .map((t, i) => `Thread ${i + 1}: ${t.label} — ${t.summary}`)
     .join("\n");
 
-  const byKey = await runAllAgents(client, stateForAgents, contextForAgents, model);
+  const { byKey, errors: agentErrors } = await runAllAgents(
+    client,
+    stateForAgents,
+    contextForAgents,
+    model,
+  );
+
+  if (agentErrors.length > 0) {
+    console.warn(
+      `[runReading] ${agentErrors.length}/${AGENTS.length} agents failed; storing partial reading`,
+    );
+  }
 
   const readingId = newId();
   const now = Date.now();
@@ -140,9 +163,14 @@ export async function runReading({ client, mode, model = OPUS_MODEL, useCache = 
       model,
       mode || null,
     );
+    // Only insert agent_views for agents that produced non-empty
+    // interpretations. Failed agents (error: true, interpretation: "")
+    // are surfaced via the response's agent_errors field, not stored.
     for (const agent of AGENTS) {
       const r = byKey[agent.key];
-      if (r) insertView.run(readingId, agent.key, agent.register, r.interpretation);
+      if (r && !r.error && r.interpretation) {
+        insertView.run(readingId, agent.key, agent.register, r.interpretation);
+      }
     }
   });
   tx();
@@ -156,6 +184,7 @@ export async function runReading({ client, mode, model = OPUS_MODEL, useCache = 
     signal_summary: synthesis.signal_summary,
     threads: synthesis.threads,
     agents: byKey,
+    agent_errors: agentErrors,
     model,
     client_mode: mode || null,
   };
