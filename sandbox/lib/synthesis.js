@@ -33,20 +33,36 @@ export async function synthesizeAcrossSnapshots(client, snapshots, model = OPUS_
     messages: [{ role: "user", content: prompt }],
   });
   const text = response.content.find((b) => b.type === "text")?.text?.trim() || "";
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) {
+
+  if (!text) {
+    console.error(`[synthesis] no text content in API response (snapshot_count=${snapshots.length})`);
     return {
       signal_summary: `${snapshots.length} snapshots dropped; synthesis unavailable.`,
       threads: [],
     };
   }
+
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) {
+    console.error(
+      `[synthesis] response contains no JSON object (length=${text.length}, preview=${JSON.stringify(text.slice(0, 120))})`,
+    );
+    return {
+      signal_summary: `${snapshots.length} snapshots dropped; synthesis unavailable.`,
+      threads: [],
+    };
+  }
+
   try {
     const parsed = JSON.parse(match[0]);
     return {
       signal_summary: parsed.signal_summary || "",
       threads: Array.isArray(parsed.threads) ? parsed.threads.slice(0, 3) : [],
     };
-  } catch {
+  } catch (e) {
+    console.error(
+      `[synthesis] JSON parse failed: ${e.message} (preview=${JSON.stringify(match[0].slice(0, 120))})`,
+    );
     return {
       signal_summary: `${snapshots.length} snapshots dropped; synthesis unparseable.`,
       threads: [],
