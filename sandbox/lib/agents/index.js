@@ -12,6 +12,7 @@ import { scheduler } from "./scheduler.js";
 import { bookkeeper } from "./bookkeeper.js";
 import { buildBoundedSystemPrompt } from "./bounded-system-prompt.js";
 import { classifyInterpretation } from "./validation.js";
+import { TOOLS } from "../tools/fetch_url.js";
 
 // Twelve agency-flavored agents in four registers, in a fixed canonical order.
 // The AGENTS array order determines the order of agent_views rows in the
@@ -56,14 +57,97 @@ export {
 
 export const OPUS_MODEL = "claude-opus-4-7";
 
+// Maximum tool-use iterations. Bounded so a misbehaving agent can't loop
+// forever calling fetch_url. After this many turns we force the agent to
+// emit a final text response.
+const MAX_TOOL_TURNS = 3;
+
+// Build the Anthropic-format tool array for an agent based on its
+// declared tool allowlist. Returns undefined if the agent has no tools
+// (so we don't pass an empty array to the API, which is wasteful).
+function toolsForAgent(agent) {
+  if (!Array.isArray(agent.tools) || agent.tools.length === 0) return undefined;
+  const schemas = [];
+  for (const name of agent.tools) {
+    const reg = TOOLS[name];
+    if (reg) schemas.push(reg.schema);
+  }
+  return schemas.length > 0 ? schemas : undefined;
+}
+
+// Execute a tool call. Returns a tool_result content block to feed back
+// to the model.
+async function executeToolCall(toolUse) {
+  const tool = TOOLS[toolUse.name];
+  if (!tool) {
+    return {
+      type: "tool_result",
+      tool_use_id: toolUse.id,
+      content: JSON.stringify({ ok: false, error: `unknown tool: ${toolUse.name}` }),
+      is_error: true,
+    };
+  }
+  try {
+    const result = await tool.run(toolUse.input || {});
+    return {
+      type: "tool_result",
+      tool_use_id: toolUse.id,
+      content: JSON.stringify(result),
+      is_error: result?.ok === false,
+    };
+  } catch (e) {
+    console.error(`[tool ${toolUse.name}] execution failed: ${e.message}`);
+    return {
+      type: "tool_result",
+      tool_use_id: toolUse.id,
+      content: JSON.stringify({ ok: false, error: e.message }),
+      is_error: true,
+    };
+  }
+}
+
 export async function runAgent(client, agent, state, context, model = OPUS_MODEL) {
-  const response = await client.messages.create({
+  const tools = toolsForAgent(agent);
+  const baseRequest = {
     model,
-    max_tokens: 250,
+    max_tokens: 1024,
     temperature: 1.0,
     system: agent.system,
-    messages: [{ role: "user", content: agent.task(state, context) }],
-  });
+  };
+  if (tools) baseRequest.tools = tools;
+
+  // Conversation grows as the agent calls tools. Starts with the user task.
+  const messages = [
+    { role: "user", content: agent.task(state, context) },
+  ];
+
+  let response;
+  let toolTurns = 0;
+
+  while (true) {
+    response = await client.messages.create({
+      ...baseRequest,
+      messages,
+    });
+
+    // If the model wants to use a tool, execute and loop.
+    if (response.stop_reason === "tool_use" && toolTurns < MAX_TOOL_TURNS) {
+      const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
+      if (toolUseBlocks.length === 0) break; // shouldn't happen but defensive
+
+      // Append the assistant's tool_use message + the tool_result message.
+      messages.push({ role: "assistant", content: response.content });
+      const toolResults = await Promise.all(
+        toolUseBlocks.map((tu) => executeToolCall(tu)),
+      );
+      messages.push({ role: "user", content: toolResults });
+      toolTurns++;
+      continue;
+    }
+
+    break;
+  }
+
   const textBlock = response.content.find((b) => b.type === "text");
   const text = (textBlock?.text || "").trim();
 
@@ -97,6 +181,7 @@ export async function runAgent(client, agent, state, context, model = OPUS_MODEL
     domain: agent.domain,
     interpretation: text,
     classification: classification.kind,
+    tool_turns: toolTurns,
   };
 }
 
