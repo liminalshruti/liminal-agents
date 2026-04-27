@@ -1,17 +1,27 @@
 #!/usr/bin/env node
 /**
- * /check orchestrator — three bounded agents deliberate on user state.
+ * /check orchestrator — twelve bounded introspective agents deliberate on user state.
  *
  * Usage: orchestrator.js '{"q1":"A","q2":"B","q3":"A"}' [optional context]
- * Writes: one signal_event (user-check / inner), one deliberation (trigger=check).
- * Returns JSON with vault_id (deliberation id) and the three agent reads.
+ * Writes:
+ *   - one signal_event (user-check / inner)
+ *   - one deliberation (trigger=check) with the 3 legacy columns populated
+ *     for back-compat (Architect, Witness, Contrarian)
+ *   - 12 agent_views rows, one per agent, normalized
+ * Returns JSON with vault_id (deliberation id) + all 12 agent reads grouped
+ * by register, plus the legacy 3-key shape for clients that haven't migrated.
  *
  * Agents never read prior corrections. System prompts never reference user history.
  */
 
 import { openVault } from "../../lib/vault/db.js";
 import { newId } from "../../lib/vault/ids.js";
-import { runAllAgents, INTROSPECTIVE_AGENTS } from "../../lib/agents/index.js";
+import {
+  runAllAgents,
+  INTROSPECTIVE_AGENTS,
+  INTROSPECTIVE_REGISTERS,
+  introspectiveByRegister,
+} from "../../lib/agents/index.js";
 import { makeClientOrExit } from "../../lib/anthropic-client.js";
 
 const inputRaw = process.argv[2];
@@ -91,22 +101,61 @@ db.prepare(
 
 try {
   const { client } = makeClientOrExit();
-  // /check is the original Liminal substrate — Architect/Witness/Contrarian
-  // reading user state across structural, somatic, and inversion registers.
-  // Pass the introspective set explicitly to prevent accidental drift to the
-  // agency set's B2B voice.
-  const byName = await runAllAgents(client, userState, userContext, {
+  // /check is the original Liminal substrate. Pass the introspective set
+  // explicitly to prevent accidental drift to the agency set's B2B voice.
+  // 12 agents fan out via Promise.allSettled — a single agent failure does
+  // not lose the other 11's reads.
+  const { byName, errors } = await runAllAgents(client, userState, userContext, {
     agents: INTROSPECTIVE_AGENTS,
   });
 
+  if (errors.length > 0) {
+    console.error(
+      `[/check] ${errors.length}/${INTROSPECTIVE_AGENTS.length} agents failed; storing partial deliberation`,
+    );
+    for (const e of errors) {
+      console.error(`  - ${e.agent_name}: ${e.reason}`);
+    }
+  }
+
+  // Write all 12 to agent_views (normalized).
+  const insertView = db.prepare(
+    `INSERT OR REPLACE INTO agent_views (deliberation_id, agent_name, register, interpretation, schema_version)
+     VALUES (?, ?, ?, ?, 1)`,
+  );
+  const tx = db.transaction(() => {
+    for (const agent of INTROSPECTIVE_AGENTS) {
+      const r = byName[agent.name];
+      if (r && !r.error && r.interpretation) {
+        insertView.run(deliberationId, agent.name, agent.register, r.interpretation);
+      }
+    }
+  });
+  tx();
+
+  // Also write the legacy 3 columns for back-compat with anything still
+  // reading deliberations.architect_view / witness_view / contrarian_view.
   db.prepare(
     `UPDATE deliberations SET architect_view = ?, witness_view = ?, contrarian_view = ? WHERE id = ?`,
   ).run(
-    byName["Architect"] || null,
-    byName["Witness"] || null,
-    byName["Contrarian"] || null,
+    byName["Architect"]?.interpretation || null,
+    byName["Witness"]?.interpretation || null,
+    byName["Contrarian"]?.interpretation || null,
     deliberationId,
   );
+
+  // Build the response: register-grouped reads + back-compat keys for the
+  // original 3 (so any caller still reading byName["Architect"] keeps working).
+  const grouped = introspectiveByRegister();
+  const reads = {};
+  for (const reg of INTROSPECTIVE_REGISTERS) {
+    reads[reg] = grouped[reg].map((a) => ({
+      name: a.name,
+      register: a.register,
+      interpretation: byName[a.name]?.interpretation || null,
+      error: byName[a.name]?.error || false,
+    }));
+  }
 
   console.log(
     JSON.stringify(
@@ -114,9 +163,12 @@ try {
         vault_id: deliberationId,
         signal_id: signalId,
         user_state: userState,
-        architect: { interpretation: byName["Architect"] },
-        witness: { interpretation: byName["Witness"] },
-        contrarian: { interpretation: byName["Contrarian"] },
+        registers: reads,
+        agent_errors: errors,
+        // Back-compat: the legacy 3-key shape for clients that haven't migrated.
+        architect: { interpretation: byName["Architect"]?.interpretation || null },
+        witness: { interpretation: byName["Witness"]?.interpretation || null },
+        contrarian: { interpretation: byName["Contrarian"]?.interpretation || null },
       },
       null,
       2,
