@@ -46,11 +46,20 @@ export class ClaudeCliClient {
       let stderr = "";
       const timer = setTimeout(() => {
         try { proc.kill("SIGKILL"); } catch {}
-        reject(new Error(`claude CLI timed out after ${this.timeoutMs}ms`));
+        // Preserve stderr context on timeout — useful when claude is hung
+        // on credential refresh, network retry, or model loading.
+        const stderrPreview = stderr.trim() ? `\nstderr: ${stderr.slice(0, 500).trim()}` : "";
+        reject(new Error(
+          `claude CLI timed out after ${this.timeoutMs}ms${stderrPreview}`,
+        ));
       }, this.timeoutMs);
       proc.stdout.on("data", (d) => (stdout += d));
       proc.stderr.on("data", (d) => (stderr += d));
-      proc.on("error", (err) => { clearTimeout(timer); reject(err); });
+      proc.on("error", (err) => {
+        clearTimeout(timer);
+        const stderrPreview = stderr.trim() ? `\nstderr: ${stderr.slice(0, 500).trim()}` : "";
+        reject(new Error(`claude CLI spawn error: ${err.message}${stderrPreview}`));
+      });
       proc.on("close", (code) => {
         clearTimeout(timer);
         if (code !== 0) {

@@ -61,14 +61,24 @@ app.post("/api/read", async (c) => {
   const { client, mode } = makeClient();
   if (!client) {
     return c.json({
-      error: "no Anthropic credential. set ANTHROPIC_API_KEY or run `claude setup-token`.",
-    }, 500);
+      error: "no Anthropic credential found",
+      remediation: "set ANTHROPIC_API_KEY or run `claude setup-token`",
+    }, 401);
   }
   try {
     const result = await runReading({ client, mode });
     return c.json(result);
   } catch (e) {
-    return c.json({ error: `read failed: ${e.message}` }, 500);
+    console.error(`[/api/read] ${e.message}`);
+    const isVaultEmpty = /vault is empty/.test(e.message);
+    const isAuthError = /401|403|API key|authentication/i.test(e.message);
+    let remediation = "check server logs for synthesis or agent errors";
+    if (isVaultEmpty) remediation = "POST /api/snapshot to add at least one snapshot before reading";
+    else if (isAuthError) remediation = "verify your ANTHROPIC_API_KEY or rerun `claude setup-token`";
+    return c.json({
+      error: `read failed: ${e.message}`,
+      remediation,
+    }, isVaultEmpty ? 400 : isAuthError ? 401 : 500);
   }
 });
 
@@ -86,14 +96,24 @@ app.get("/api/readings/:id", (c) => {
   const id = c.req.param("id");
   const db = openDb();
   const row = db.prepare(`SELECT * FROM readings WHERE id = ?`).get(id);
-  if (!row) return c.json({ error: "not found" }, 404);
+  if (!row) return c.json({ error: "reading not found", reading_id: id }, 404);
   const corrections = db.prepare(
     `SELECT id, agent, tag, note, timestamp FROM corrections WHERE reading_id = ? ORDER BY timestamp ASC`,
   ).all(id);
+  // Log on JSON parse failure rather than silently producing empty arrays —
+  // a corrupted reading should be visible to a debugger, not invisible.
   let snapshotIds = [];
   let threads = [];
-  try { snapshotIds = JSON.parse(row.snapshot_ids); } catch {}
-  try { threads = JSON.parse(row.threads); } catch {}
+  try {
+    snapshotIds = JSON.parse(row.snapshot_ids);
+  } catch (e) {
+    console.warn(`[/api/readings/${id}] snapshot_ids JSON parse failed: ${e.message}`);
+  }
+  try {
+    threads = JSON.parse(row.threads);
+  } catch (e) {
+    console.warn(`[/api/readings/${id}] threads JSON parse failed: ${e.message}`);
+  }
   const viewRows = db.prepare(
     `SELECT agent_key, register, interpretation FROM agent_views WHERE reading_id = ?`,
   ).all(id);
@@ -120,22 +140,44 @@ app.post("/api/correction", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { reading_id, agent, tag, note } = body;
   if (!reading_id || !agent || !tag) {
-    return c.json({ error: "need reading_id, agent, tag" }, 400);
+    return c.json({
+      error: "need reading_id, agent, tag",
+      required: ["reading_id", "agent", "tag"],
+      optional: ["note"],
+    }, 400);
   }
   if (!AGENT_KEYS.includes(agent)) {
-    return c.json({ error: `agent must be one of: ${AGENT_KEYS.join("|")}` }, 400);
+    return c.json({
+      error: `agent must be one of the 12 canonical agent keys`,
+      received: agent,
+      valid_agents: AGENT_KEYS,
+    }, 400);
   }
   if (!isValidTag(tag)) {
-    return c.json({ error: `invalid tag. allowed: ${CORRECTION_TAGS.join(", ")}` }, 400);
+    return c.json({
+      error: "invalid correction tag",
+      received: tag,
+      valid_tags: CORRECTION_TAGS,
+    }, 400);
   }
   const db = openDb();
   const exists = db.prepare(`SELECT 1 FROM readings WHERE id = ?`).get(reading_id);
-  if (!exists) return c.json({ error: "unknown reading_id" }, 404);
+  if (!exists) {
+    return c.json({ error: "reading not found", reading_id }, 404);
+  }
 
   const id = newId();
-  db.prepare(
-    `INSERT INTO corrections (id, reading_id, agent, tag, note, timestamp) VALUES (?,?,?,?,?,?)`,
-  ).run(id, reading_id, agent, tag, note || null, Date.now());
+  try {
+    db.prepare(
+      `INSERT INTO corrections (id, reading_id, agent, tag, note, timestamp) VALUES (?,?,?,?,?,?)`,
+    ).run(id, reading_id, agent, tag, note || null, Date.now());
+  } catch (e) {
+    console.error(`[/api/correction] insert failed: ${e.message}`);
+    return c.json({
+      error: `correction insert failed: ${e.message.split("\n")[0]}`,
+      remediation: "check server logs",
+    }, 500);
+  }
 
   return c.json({ ok: true, correction_id: id });
 });
