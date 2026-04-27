@@ -30,8 +30,16 @@ function loadAgentViewsByReading(db, readingId) {
 function inflateCachedReading(db, row) {
   let snapshotIds = [];
   let threads = [];
-  try { snapshotIds = JSON.parse(row.snapshot_ids); } catch {}
-  try { threads = JSON.parse(row.threads); } catch {}
+  try {
+    snapshotIds = JSON.parse(row.snapshot_ids);
+  } catch (e) {
+    console.warn(`[inflateCachedReading ${row.id}] snapshot_ids JSON parse failed: ${e.message}`);
+  }
+  try {
+    threads = JSON.parse(row.threads);
+  } catch (e) {
+    console.warn(`[inflateCachedReading ${row.id}] threads JSON parse failed: ${e.message}`);
+  }
   const byKey = loadAgentViewsByReading(db, row.id);
   return {
     reading_id: row.id,
