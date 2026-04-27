@@ -14,6 +14,7 @@ import {
 } from "../lib/orchestrator.js";
 import { seedDemoVault } from "../lib/seed.js";
 import { AGENT_KEYS, REGISTERS, agentsByRegister } from "../lib/agents/index.js";
+import { retrieveAll, retrieveSnapshots, retrieveCorrections } from "../lib/retrieve.js";
 
 const app = new Hono();
 
@@ -180,6 +181,39 @@ app.post("/api/correction", async (c) => {
   }
 
   return c.json({ ok: true, correction_id: id });
+});
+
+// ── Retrieval (FTS5 over snapshots + corrections) ──────────────────────────
+// POST /api/retrieve { query, limit?, kind?, agent?, tag?, raw? }
+//   - kind: "snapshots" | "corrections" | "all" (default "all")
+//   - limit: 1-50 (default 10)
+//   - agent: filter corrections by agent_key (optional)
+//   - tag: filter corrections by tag (optional)
+//   - raw: pass query unsanitized to FTS5 (advanced — boolean operators etc.)
+app.post("/api/retrieve", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { query, limit = 10, kind = "all", agent = null, tag = null, raw = false } = body;
+  if (!query || typeof query !== "string" || !query.trim()) {
+    return c.json({
+      error: "query is required",
+      example: { query: "customer escalation", limit: 5, kind: "snapshots" },
+    }, 400);
+  }
+  const opts = { limit, raw };
+  let result = {};
+  if (kind === "snapshots") {
+    result = { snapshots: retrieveSnapshots(query, opts) };
+  } else if (kind === "corrections") {
+    result = { corrections: retrieveCorrections(query, { ...opts, agentKey: agent, tag }) };
+  } else if (kind === "all") {
+    result = retrieveAll(query, opts);
+  } else {
+    return c.json({
+      error: "kind must be 'snapshots', 'corrections', or 'all'",
+      received: kind,
+    }, 400);
+  }
+  return c.json({ query, ...result });
 });
 
 // ── Doctrine ───────────────────────────────────────────────────────────────
