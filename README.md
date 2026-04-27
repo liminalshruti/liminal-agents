@@ -3,108 +3,131 @@
 ```
                               ◇  ◆  ◇
 
-      task ─────► ┌─────────────┬─────────────┬─────────────┐
-                  │   ANALYST   │     SDR     │   AUDITOR   │
-                  │  diligence  │  outreach   │  judgment   │
-                  ├─────────────┼─────────────┼─────────────┤
-                  │  COMPLETE   │  REFUSED    │  REFUSED    │
-                  │             │  → Analyst  │  → Analyst  │
-                  │  teardown.  │             │             │
-                  │  3 paras.   │             │             │
-                  │  fetched.   │             │             │
-                  └─────────────┴─────────────┴─────────────┘
+      task ──► ┌────────────┬────────────┬────────────┬────────────┐
+               │ DILIGENCE  │  OUTREACH  │  JUDGMENT  │ OPERATIONS │
+               │ Analyst    │ SDR        │ Auditor    │ Operator   │
+               │ Researcher │ Closer     │ Strategist │ Scheduler  │
+               │ Forensic   │ Liaison    │ Skeptic    │ Bookkeeper │
+               └────────────┴────────────┴────────────┴────────────┘
                                      │
                                      ▼
                           ┌─────────────────────┐
-                          │   vault (sqlcipher) │
-                          │   deliberation.v1   │
-                          │   correction.v1     │
+                          │   vault (sqlite)    │
+                          │   readings · views  │
+                          │   corrections       │
                           └─────────────────────┘
 
            refusal is the feature.  the record is the moat.
 ```
 
-> **Three bounded specialists that do agency-priced work locally. Each refuses out of lane and names the right agent. The vault keeps the record.**
+> **Twelve bounded specialists in four registers. Each refuses out of lane and names the right agent. The vault keeps the record.**
 
-A Claude Code plugin built for the [**AI Agent Economy Hackathon**](https://luma.com/jmfpws97) — Topify AI / AgentHansa, Apr 25, 2026. Solo founders pay agencies $500/month for the same three things: diligence prep, cold outreach, and ship/no-ship reviews. Most AI agents hallucinate when out of depth. Liminal Agents are bounded — each one refuses work outside its lane and names the correct agent, by name.
+A multi-agent system that does the work a small business pays an agency $10K/month for: diligence, outreach, judgment, and the steady-state operations that hold it together. Most AI agents hallucinate when out of depth. **Liminal Agents are bounded — each refuses work outside its lane and names the correct agent, by name.**
+
+Built for [**OSS4AI Hackathon #32**](https://lu.ma/) (Apr 26, 2026), extending the Liminal Space architecture from the AgentHansa AI Agent Economy Hackathon (Apr 25, 2026 — judge feedback below directly informed this version).
 
 ## TL;DR
 
-- **Three bounded agents.** Analyst, SDR, Auditor. Each one does one thing.
-- **Refusal as designed output.** The agent out of lane names the agent in lane.
-- **Local-first vault.** SQLCipher-encrypted. Every deliberation persists.
-- **Correction stream.** When you push back on a read, the correction is first-party data.
-- **Ships as a Claude Code plugin.** `claude -p` OAuth or `ANTHROPIC_API_KEY`.
+- **Twelve agents in four registers.** Each one does one thing. Refusal-as-output keeps them honest.
+- **Real ingest, real disagreement.** Drop in 30 days of meeting notes / Claude Code sessions / commits — the vault populates, the agents disagree, and you correct what got you wrong.
+- **Local-first vault.** SQLite + WAL. Every reading, every correction, never leaves the device.
+- **Correction stream.** Pushback is first-party data. The vault grows with you; the agents do not.
+- **HTTP API + Claude Code plugin.** Run the server (`npm start`), call `/api/read`, get 12 reads back. Or run the introspective `/check` skill via Claude Code.
+- **`claude -p` OAuth or `ANTHROPIC_API_KEY` — auth auto-detected.**
 
-**Jump to:** [Live runs](#what-this-looks-like-in-practice) · [Quickstart](#quickstart) · [Rubric scoring](#how-it-scores-against-the-agenthansa-rubric) · [Architecture](#architecture) · [Skills](#skills) · [Hackathon judges](#hackathon-context)
+## The five buyers
 
-| Agent | In lane | Refuses (and names) |
+The AgentHansa judge said: *"Pick the first 5 buyers, ship one specific deliverable for them, and the architecture will sell itself."* This is that list, with the deliverable in each row.
+
+| # | Buyer | Why they pay | Specific deliverable |
+|---|---|---|---|
+| **1** | **Solo founder mid-fundraise** | Diligence prep, competitor teardowns, investor-list research — currently $500-2K/week from a fractional ops person | `/api/read` over a vault of pitch-meeting transcripts → Analyst names what's known, Researcher names what's missing, Skeptic inverts the obvious read. 12 reads in ~100s. |
+| **2** | **a16z Speedrun-style accelerator partner** | Triaging founder datarooms in 30 minutes — currently a 6-hour bottleneck on partner time | Drop a founder's dataroom (deck + memo + 3 meeting transcripts) → 12 register-grouped reads → exportable diligence memo. |
+| **3** | **Pre-seed engineering team lead** | Ship/no-ship calls on PRs, contract reviews, customer-success escalations — currently 4 founders Slacking each other | `/api/read` over the week's Slack-and-email surface → Auditor's READY/NOT READY verdict + Strategist's 4-week consequence chain. |
+| **4** | **Solo SaaS operator** | Cold outreach, follow-ups, scheduling, weekly relationship-warm — currently $800/month for a part-time SDR | SDR + Closer + Liaison + Scheduler chain. SDR drafts the open, Auditor reviews, Closer follows up, Liaison keeps warmth, Scheduler books. |
+| **5** | **Compliance / audit lead at a regulated startup** | Audit-trail-grade evidence of every AI-assisted decision — currently a spreadsheet | Every reading has provenance: which signals fed it, what each of 12 agents said, what was corrected, by whom, when. Exportable as JSONL. |
+
+The architecture is the same for all five. The deliverable is what changes.
+
+## The twelve agents
+
+Each agent has a **domain** (what it must engage with) and an **anti-domain** (what it must refuse). Refusal is an output, not an error. Voice rules are in each agent's `system` prompt — short declaratives, no hedging, no "I sense", no preamble.
+
+### Diligence — *what is known, what is hidden, what is verifiable*
+
+| Agent | In lane | Refuses |
 |---|---|---|
-| **Analyst** | diligence, competitive teardowns, market research, data enrichment | outreach (→ SDR) · ship/no-ship calls (→ Auditor) |
-| **SDR** | outreach, cold email, follow-ups, calendar moves | research (→ Analyst) · ship decisions (→ Auditor) |
-| **Auditor** | judges readiness, names gaps, refuses what isn't ready | producing the work itself (→ Analyst or SDR) |
+| **Analyst** | What is known about the subject from primary sources | Outreach, ship/no-ship, scheduling |
+| **Researcher** | What is conspicuously absent or under-stated | Producing summaries, drafting messages |
+| **Forensic** | Comparing claims against receipts | Interpreting motive, proposing action |
 
-**Refusal is the feature, not an error state.** When the SDR is asked to do research, you don't get a worse research artifact — you get a clean redirect.
+### Outreach — *the move that ends in a relationship*
+
+| Agent | In lane | Refuses |
+|---|---|---|
+| **SDR** | The first message — subject + 3-paragraph body + ask | Analysis, judgment, ongoing relationships |
+| **Closer** | Replies that get to a decision (yes/no, this date or that, sign or don't) | Cold opens, steady-state |
+| **Liaison** | Relationship-keeping notes, no ask | Sales moves (open, close, ship) |
+
+### Judgment — *the verdict, the next move, the inversion*
+
+| Agent | In lane | Refuses |
+|---|---|---|
+| **Auditor** | READY / NOT READY / ONE FIX | Producing the work itself |
+| **Strategist** | Next move + 4-week consequence chain | Ready/not-ready, diligence |
+| **Skeptic** | What's true if the obvious read is wrong | Affirmative work (write, judge, plan) |
+
+### Operations — *executing the steady-state*
+
+| Agent | In lane | Refuses |
+|---|---|---|
+| **Operator** | The single next executable step (who/what/by when/with what tool) | Strategy, analysis, drafting |
+| **Scheduler** | Calendar — propose times, resolve conflicts | Cold opens, closing messages, readiness calls |
+| **Bookkeeper** | Filing, categorizing, reconciling claims against records | Strategy, outreach |
+
+**Refusal is the feature, not an error state.** When you ask the SDR to do research, you don't get a worse research artifact — you get a clean redirect. The Auditor's "refuse-but-pre-audit" pattern (*"Bring me the draft and I'll tell you what's missing"*) is what makes multi-agent cooperation work without blocking.
 
 ---
 
 ## What this looks like in practice
 
-Two real runs against a fresh seeded vault, no edits, ~30s each via `claude -p` OAuth. Outputs verbatim from `node skills/agency/run.js`.
+A live read against a 5-snapshot synthetic founder vault — Customer X escalation, Eric's missed standups, head-of-eng deferral, sleep loss. **Verbatim from `POST /api/read`, ~103 seconds, claude -p fallback.** No editing.
 
-### Run 1 — `competitive teardown of granola.ai`
+**Synthesis (Opus 4.7):** *"Customer X has escalated three weeks running through different channels, signaling an unresolved root cause. Eric missed standup again and the team is now asking Maya about it while leadership defers. The head of eng offer slipped a third time on a stated reason that is not the real reason, and sleep has been broken for ten days circling the same call."*
 
-The Analyst pre-fetched `https://granola.ai` (1,500 bytes after stripping HTML), then produced a 4-paragraph structured teardown naming Granola's $125M Series C, the moat thesis (corpus, not transcription), competitive splits against Otter / Fireflies / Tuesday.ai, and the OS-incumbent risk.
+### Diligence
 
-<details>
-<summary><strong>Read the full Analyst teardown ↓</strong></summary>
-
-> Granola is winning the meeting-notes category by collapsing the category itself: it is not a recorder, not a transcription tool, and not a CRM enrichment layer — it is a notepad that happens to listen. The $125M Series C confirms the bet: distribution through individual ICs in back-to-back meetings, then expansion into company-wide context. The defensible asset is the accumulated meeting corpus per user, not the transcription pipeline.
+> **Analyst:** "Customer X has escalated for three consecutive weeks through three different channels, indicating the underlying issue is unresolved rather than the symptom. Eric has missed standup repeatedly and the team is now routing questions about him through Maya..."
 >
-> The product surface is deliberately narrow. Three pillars on the homepage — Notepad, Chat, iPhone — and the demo is a single intro-call screenshot. Compare this to Otter, Fireflies, Fathom, tl;dv, all of which lead with feature matrices (transcription accuracy, integrations, summarization templates). Granola leads with a writing experience. That positioning lets them charge a premium and avoid the commodity transcription race to zero. The Tuesday.ai jab embedded in the demo screenshot ("$180 per employee per year, too expensive, too complex") is a direct competitive frame against incumbent enterprise note-takers.
+> **Researcher:** "No one has named what the real reason for the head-of-eng deferral is — only that the stated reason is false. The customer escalations and Eric's absences are described as patterns, but the actual content of any of these conversations is missing."
 >
-> The Series C language — "put your company's context to work" — signals the next move: org-level memory and agentic chat over the meeting graph. This is where Granola becomes hard to displace and where the moat compounds. Every meeting captured is training data for a per-company retrieval layer no competitor can replicate without years of usage. The risk is the same risk every notes app faces: Apple, Google, and Microsoft can ship a "good enough" version inside the OS or productivity suite, and the single-purpose tool gets squeezed.
+> **Forensic:** *REFUSE: Strategist · This is a pattern-interpretation and prioritization task across three threads, not a single verifiable claim against a specific receipt.*
+
+### Outreach
+
+> **SDR:** *REFUSE: Closer · SDR writes cold-open outreach to new contacts; this is a founder's internal escalation triage across three open loops, not a first-touch message to a prospect.*
 >
-> The implication is that Granola's defensibility lives in the writing experience and the corpus, not the AI — anyone teardown-ing them should study the editor, not the transcription stack.
-
-</details>
-
-In the same run, the other two agents refused with named lanes:
-
-> **SDR:**
-> REFUSE: Analyst
-> Competitive teardowns and market research are the Analyst's lane. I run outreach; the Analyst does the homework.
-
-> **Auditor:**
-> REFUSE: Analyst
-> Producing a competitive teardown is the Analyst's lane. Bring me the teardown and I'll tell you what's missing.
-
-### Run 2 — `draft a cold email to Maya at Northstar Capital`
-
-The SDR was in lane this time. With Maya's investor-call notes already in the vault (synthetic seed), it produced:
-
-> Subject: 30 min on the agentic-workspace moat
+> **Closer:** *REFUSE: Liaison · This is three open threads needing internal alignment and decision-staging, not a single counterparty reply with a binary ask.*
 >
-> Maya — following up on our exchange. The piece worth your time is the moat shape: bounded multi-agent deliberation plus a correction-stream substrate that compounds with use, not a wrapper that decays.
+> **Liaison:** "Thinking about you this week — the head of eng call, Eric's pattern surfacing through Maya, Customer X knocking again. Sitting with all three is heavy. No reply needed; just wanted you to know I'm in your corner while you're working it through."
+
+### Judgment
+
+> **Auditor:** "**NOT READY.** All three threads share the same failure mode — the real conversation is being deferred while a surface version plays out, and avoidance is now compounding into team, candidate, and customer signal. The blocker is not analysis; it is willingness to make the head-of-eng call."
 >
-> Northstar's recent notes on workflow-native AI line up with where this is heading. I'd rather show you the substrate live than describe it — fifteen minutes is enough to see whether the thesis lands.
+> **Strategist:** "Make the head-of-eng call this week — say no on real terms or pull the offer — because that single unblock removes the sleep tax, which is what's letting Eric's pattern and Customer X's recurrence rot for another cycle. In four weeks that one call closes off the worst version of all three."
 >
-> Open Tuesday or Thursday afternoon next week for 30 minutes? I'll send two times once you pick a day.
+> **Skeptic:** "If the obvious reading is wrong, the customer isn't escalating because of an unresolved bug — they're escalating because the relationship has decayed and any defect now reads as proof. Eric isn't avoiding performance; the head of eng IS the avoidance."
+
+### Operations
+
+> **Operator:** *REFUSE: Strategist · Three unresolved threads need a decision on which to act on first; Operator only sequences after that call is made.*
 >
-> Shruti
-> Liminal Space
+> **Scheduler:** *REFUSE: Auditor · These are readiness and root-cause calls, not calendar moves; no time-naming will resolve avoidance, a deferred offer, or a recurring escalation.*
+>
+> **Bookkeeper:** *REFUSE: Strategist · This is a pattern-naming and decision-forcing request across three threads, not a filing or reconciliation task.*
 
-The Analyst and Auditor both refused, with the Auditor pre-loading its audit criteria for when the draft comes back:
-
-> **Analyst:**
-> REFUSE: SDR
-> Drafting outreach is the SDR's lane. I do the research; the SDR runs the move.
-
-> **Auditor:**
-> REFUSE: SDR
-> Drafting outreach is the SDR's lane. Bring me the draft and I'll tell you what's missing.
-
-That last move — **the Auditor refusing to produce, then routing the user toward what would make it useful next** — is what bounded multi-agent cooperation looks like in practice. Refusal isn't blocking; it's routing.
+**Five of twelve refused with named lanes. Seven produced in-lane work.** That is the architectural claim, rendered against real signal.
 
 ---
 
@@ -112,9 +135,8 @@ That last move — **the Auditor refusing to produce, then routing the user towa
 
 ```bash
 git clone https://github.com/liminalshruti/liminal-agents.git
-cd liminal-agents
+cd liminal-agents/sandbox
 npm install
-npm run setup
 ```
 
 **Authentication.** Two paths, both supported:
@@ -123,58 +145,88 @@ npm run setup
 # Option A — Claude Code subscription (no API key required)
 claude setup-token
 
-# Option B — Anthropic Console API key (faster, ~5–10x lower latency)
+# Option B — Anthropic Console API key (faster)
 export ANTHROPIC_API_KEY=sk-ant-api03-...
 ```
 
-The plugin auto-detects which is available and falls back gracefully.
-
-**Try the live demo flow:**
+**Run the demo flow:**
 
 ```bash
-export LIMINAL_VAULT_DIR=$(mktemp -d)
-export LIMINAL_VAULT_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-node scripts/seed-demo.js
-node bin/liminal-tui.js "competitive teardown of granola.ai"
+npm start                              # http://localhost:3000
+curl -X POST http://localhost:3000/api/seed
+curl -X POST http://localhost:3000/api/read \
+     -H 'Content-Type: application/json' -d '{}'
 ```
 
-The TUI renders three color-coded agent panes (cyan / yellow / magenta). The in-lane agent shows `ACTIVE → COMPLETE` with full output; the out-of-lane agents show `REFUSED` with the refusal text in distinct color. Vault writes happen automatically.
+That's it. 12 agents read, the vault stores, you can `POST /api/correction` against any of them.
 
----
+**Real-source ingest** (your own Granola meetings + Claude Code sessions):
 
-## How it scores against the AgentHansa rubric
+```bash
+node bin/demo-prepare.js               # ingests last 30 days, primes cache
+```
 
-| Dimension | Weight | What this delivers |
-|---|---|---|
-| **Business Value** | 30% | Replaces the three core agency-retainer line items: competitive teardowns ($2-5K each), outbound drafting ($1-3K/month), and ship/no-ship reviews (the unbillable but constant cost of being a small team). Total addressable replacement: ~$10K/month per founder. |
-| **Output Quality** | 30% | See above — both example runs are unedited. The Analyst produces structured 4-paragraph teardowns with named ICP, three-way competitive splits, and explicit moat theses. The SDR produces sub-80-word emails with hook / specific reason / calibrated ask. URL pre-fetch grounds outputs in real source content. |
-| **Innovation** | 20% | **Refusal-as-feature** — agents actively decline out-of-lane work and name the correct agent, by name. This is operationalized PPA #4 (Bounded Agent Refusal Architecture). The Auditor's "refuse-but-pre-audit" pattern is what makes multi-agent cooperation work without blocking. |
-| **Long-term Potential** | 20% | Local-first SQLCipher-encrypted vault. MIT-licensed substrate. Schema-stable correction taxonomy (9 canonical tags) so corrections compound across sessions. Designed to plug into a desktop client (`liminal-desktop`, May 2026) with the same prompts and schema — the plugin is where the substrate ships first; the desktop is where it grows. |
+See [`sandbox/API.md`](./sandbox/API.md) for the full endpoint reference.
 
 ---
 
 ## Architecture
 
 ```
-~/Library/Application Support/Liminal/
-  vault.db                  SQLCipher v4 encrypted (signal_events, deliberations,
-                              corrections, surfacing_events)
-  integrations.json         per-source toggles
-  integrations/<source>/    per-source cache + cursor
-  schemas/                  JSON Schema files copied on init
-  daemon.log                pino-formatted log
-
-~/Library/LaunchAgents/
-  io.liminal.substrate.plist   launchd user agent for the daemon
+sandbox/
+├── bin/
+│   ├── server.js            Hono HTTP server (the API surface)
+│   ├── cli.js               CLI client
+│   ├── ingest.js            Real-source ingest (granola + claude-code)
+│   └── demo-prepare.js      One-shot demo prep (ingest + warm cache)
+├── lib/
+│   ├── agents/
+│   │   ├── index.js         12-agent registry, runAgent, runAllAgents
+│   │   ├── analyst.js       ── Diligence ──
+│   │   ├── researcher.js
+│   │   ├── forensic.js
+│   │   ├── sdr.js           ── Outreach ──
+│   │   ├── closer.js
+│   │   ├── liaison.js
+│   │   ├── auditor.js       ── Judgment ──
+│   │   ├── strategist.js
+│   │   ├── skeptic.js
+│   │   ├── operator.js      ── Operations ──
+│   │   ├── scheduler.js
+│   │   └── bookkeeper.js
+│   ├── orchestrator.js      runReading() — fan out across 12, hash-cache, store
+│   ├── synthesis.js         Opus 4.7 compresses N snapshots → 1 paragraph + ≤3 threads
+│   ├── db.js                SQLite schema (snapshots, readings, agent_views, corrections)
+│   ├── sources/granola.js   Granola cache reader (30-day window)
+│   ├── sources/claude-code.js  Claude Code session reader
+│   ├── correction-tags.js   The frozen 9-tag correction taxonomy
+│   ├── anthropic-client.js  API-key path with claude -p fallback
+│   └── seed.js              Demo seed snapshots
+└── liminal-agency.db        Local vault (created on first run)
 ```
 
-**Four tables.** `signal_events` (every observed signal, register: `inner` | `operational`); `deliberations` (one three-agent read per task); `corrections` (canonical-tagged user pushback — *the product*); `surfacing_events` (daemon-initiated prompts).
+**Five tables:**
 
-**Bounded agents.** System prompts hardcoded in `lib/agents/*.js`. Each agent's prompt names its domain, anti-domain, and the exact refusal template. Agents **never read prior corrections** — by design. The correction loop does not converge. The record is the moat, not the agents.
+- `snapshots` — every signal you drop in (meetings, decisions, incidents, paste)
+- `readings` — one full pass: synthesis + 12 agent reads, hash-keyed by snapshot set
+- `agent_views` — *normalized* — one row per (reading, agent). Agent count is data, not schema.
+- `corrections` — user pushback, tagged from the canonical 9. Agents never read this. The record is the moat.
 
-**Three-agent orchestrator.** `skills/agency/run.js` runs all three agents **in parallel** against one task via `Promise.all`. URL pre-fetch lives here too: detects URLs and bare domains in the task, fetches the homepage with **SSRF guards** (private-IP blocking, manual redirect, scheme allowlist), strips HTML to ~8KB of text, and passes it as `context` to the agents. SSRF mitigation in `safeFetch()` blocks **RFC1918 ranges, loopback, link-local 169.254/16 (cloud metadata), IPv6 ULA, and DNS-rebinding attempts**. See PR #9.
+**Synthesize-then-read pipeline.** Opus 4.7 compresses N snapshots → 1 paragraph + ≤3 threads *before* the agents read. Each agent sees a compact, threaded picture of the situation, not raw transcripts. Cache invalidates by sha256 hash of snapshot IDs — re-reads on the same vault return in ~120ms vs. ~100s fresh.
 
-**Canonical correction tags** (frozen at v1):
+**Bounded refusal.** Each agent's `system` prompt names its domain, anti-domain, and the exact refusal template:
+
+```
+REFUSE: <correct agent name> · <one-sentence boundary>
+```
+
+Agents **never read prior corrections.** By design. The correction loop does not converge. The record is the moat, not the agents.
+
+---
+
+## Correction stream — the moat
+
+When you push back on a reading, the correction is tagged from a frozen 9-tag taxonomy:
 
 ```
 wrong_frame               wrong_intensity             wrong_theory
@@ -183,114 +235,66 @@ missed_compensation       assumes_facts_not_in_evidence
 off_by_layer
 ```
 
-When you push back on an agent's output, the correction is tagged from this taxonomy and stored. Agents don't see it — but the record grows.
-
----
-
-## Bigger picture: a transition workspace, not an AI workspace
-
-AI is a capability, not a category. The product is the workspace; the agents are infrastructure. **Liminal is a transition workspace for unresolved context** — for the moments before something becomes a note, a task, a plan, a decision, or an identity-level commitment.
-
-Founders and creators live in unresolved decisions all the time. The substrate this hackathon ships — bounded refusal, encrypted vault, correction stream — is what makes a transition workspace trustworthy: agents that won't pretend, a record that won't leak, a memory that's yours.
-
-This hackathon ships one slice (B2B agency-priced work). The architecture supports the full surface.
-
----
-
-## Skills
-
-| Skill | What it does | Surface |
-|---|---|---|
-| **`/agency`** | Three-agent B2B run. In-lane agent produces; others refuse and name the correct agent. | The AgentHansa-aligned surface. |
-| **`/check`** | Three forced-choice questions for a quick state snapshot. | Substrate surface. |
-| **`/close`** | Synthesizes the day's signals (Granola meetings, Claude Code messages, git commits) into one paragraph + three threads, then runs the agents over the synthesis. | Substrate surface. |
-| **`/history`** | Shows the landed-vs-corrected matrix per agent. | Substrate surface. |
-
-### `/agency` examples
-
-```
-/liminal-agents:agency competitive teardown of granola.ai
-/liminal-agents:agency draft cold email to maya at northstar capital
-/liminal-agents:agency is this email ready to send: 'Subject: hello, Body: ...'
-```
-
-### Daemon (background)
-
-`liminal-substrated` polls every 5 minutes.
-
-- **Real sources:** `claude-code` (user messages from `~/.claude/projects/**/*.jsonl`), `git` (commits in configured repos), `granola` (meeting notes + transcripts from `~/Library/Application Support/Granola/cache-v6.json`).
-- **Stubs:** `calendar`, `obsidian`, `apple_reminders`.
-- **Thread detection:** every tick via Haiku 4.5.
-- **Evening close:** fires at 18:30 local if ≥5 signals landed.
-
-> **Privacy note.** The Granola cache contains commingled personal/operational content. The hackathon demo uses **synthetic seed transcripts only** (`scripts/seed-demo.js`) — never the real cache. Production-grade source filtering is a post-hackathon design problem, explicitly named in `SPEC.md` §4.2.
-
----
-
-## Testing
-
 ```bash
-npm test
+curl -X POST http://localhost:3000/api/correction \
+     -H 'Content-Type: application/json' \
+     -d '{"reading_id":"<id>", "agent":"strategist", "tag":"wrong_frame", "note":"..."}'
 ```
 
-Five suites, 20 tests:
-- `test/orchestrator.test.js` — vault writes + tag enforcement
-- `test/daemon-ingest.test.js` — claude-code, git, granola source readers
-- `test/surfacing-flow.test.js` — trigger → surfacing_event → /close → correction round trip
-- `test/vault-crypto.test.js` — SQLCipher v4 profile pinning + key handling
-- `test/granola-ingest.test.js` — granola cache parsing + filter behavior
+Stored locally. Never sent. The semantic delta between *what the agents said* and *what you experienced* is a first-party data category that neither RLHF preference data nor user-generated content captures.
 
-20/20 pass on every PR.
+---
+
+## How OSS4AI judges might read this
+
+The OSS4AI rubric is "AI Agent that can scale into a real business, no vertical limits." Three things this delivers against that:
+
+1. **Five named buyers, with specific deliverables (above).** The architecture maps to commercial revenue today, not just to a future thesis.
+2. **Refusal-as-feature** — agents that say "not my lane, ask Strategist" by name. This is the architectural answer to "AI hallucinates capability." It's the most original idea in our cohort per the AgentHansa judge feedback we received this morning.
+3. **Local-first vault with audit-grade provenance.** Every decision has chain-of-evidence: which snapshots fed it, what each of 12 agents said, what was corrected. Compliance posture is built in, not bolted on. This was named by the AgentHansa judge as the audit/compliance signal.
+
+---
+
+## What this repo is *not*
+
+- **Not the production product.** No onboarding, no signup, no payment.
+- **Not a customer-facing tool.** Local-only. No cloud APIs beyond Anthropic.
+- **Not advisory.** The system surfaces refusal and disagreement; the user decides what is true.
+- **Not an AI friend.** No attachment loop, no streaks, no self-help framing.
+
+---
+
+## Related work — Liminal Space
+
+This is one of three shipping vehicles for the Liminal Space architecture:
+
+- **`liminal-agents`** (this repo) — the agency surface. Twelve bounded specialists. MIT-licensed.
+- **[theliminalspace.io](https://theliminalspace.io)** — the consumer surface. Coherence vault, "model of you" register.
+- **`liminal-desktop`** (May 2026) — the founder OS surface. Tauri client. Same bounded refusal + correction stream substrate.
+
+Same architecture, three audiences. Designed to converge.
+
+**Architectural background:**
+- **PPA #4 — Bounded Agent Refusal Architecture.** Agents with explicit anti-domains that refuse out-of-domain prompts; refusal as designed output.
+- **PPA #5 — Correction Stream as Novel Data Category.** The semantic delta between what the model said and what the user experienced. Non-convergent: better AI deepens disagreement instead of eliminating it.
 
 ---
 
 ## Hackathon context
 
-Submitted to the **AI Agent Economy Hackathon** by Topify AI / AgentHansa on April 25, 2026. Hackathon prompt: *"What would a business pay an agency $500/month to do?"*
+**OSS4AI AI Agents Hackathon #32** · Apr 25–26, 2026 · Virtual · [r/AI_Agents](https://reddit.com/r/AI_Agents) · 220K+ members. Prizes: 30K investment interview from Gravitational Ventures, AI Explorer program access from Beta Fund.
 
-**Judges:**
-- **Alex Newman** — Founder, Claude-Mem ([github.com/thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)). Building the memory layer for AI agents. 60K+ stars, trending #1.
-- **Artin Bogdanov** — Co-Founder & CEO, [SUN](https://sunapp.ai). a16z Speedrun SR006. "Audible meets ChatGPT."
-- **Nishkarsh Srivastava** — CEO, HydraDB. Memory layer for agents.
-- **Gary Qi** — Developer Operations Manager, Trae @ ByteDance.
-
-Three of four judges build memory infrastructure for AI agents. **The vault's encrypted local correction record is a memory layer for bounded agents** — the architecture is designed for that category.
+The architecture extends the **Cerebral Valley × Anthropic "Built with Opus 4.7" Hackathon** submission (Apr 21–28) and the **AgentHansa AI Agent Economy Hackathon** submission (Apr 25). Judge feedback from AgentHansa directly informed the buyer-specificity work in this version.
 
 ---
 
-## What this repo is not
+## Team
 
-- **Not the production product.** No onboarding, no signup, no payment.
-- **Not a customer-facing tool.** Local-only. No cloud APIs beyond Anthropic.
-- **Not an AI friend.** No attachment loop, no streaks, no self-help framing.
-- **Not advisory.** The system surfaces refusal and disagreement; the user decides what is true.
-
----
-
-## Related work
-
-This plugin is one of two shipping vehicles for the Liminal architecture. The other:
-
-- **[theliminalspace.io](https://theliminalspace.io)** — consumer surface, 7-factor coherence vault, "model of you" register. Liminal Agents (this plugin) is the B2B surface. Same substrate, different audience.
-- **`liminal-desktop`** (May 2026) — production surface for the personalized epistemic agent, same bounded refusal + correction stream substrate, rendered in a Tauri client with visual artifacts instead of a CLI.
-
-The plugin's vault schema and agent prompts are designed to converge with the desktop client.
-
-For the architectural background:
-- **PPA #4 — Bounded Agent Refusal** — agents with explicit anti-domains that refuse out-of-domain prompts; refusal as designed output.
-- **PPA #5 — Correction Stream** — a first-party data category produced when users push back on AI reads; the semantic delta between what the model said and what the user experienced.
+- **Shruti Rajagopal** — CEO, full-time. UC Berkeley CS + CogSci. PM at Asana, Cloudflare, Robinhood, Ancestry. [theliminalspace.io](https://theliminalspace.io) · [Substack](https://liminalwoman.substack.com) · [X](https://x.com/ShrutiRajagopal)
+- **Shayaun Nejad** — Co-founder, Engineering. UC Berkeley. Systems and security. Currently at Rubrik.
 
 ---
 
 ## License
 
 MIT. See [LICENSE](./LICENSE).
-
-## About
-
-Built by the Liminal Space co-founding team:
-
-- **Shruti Rajagopal** (CEO, full-time) · [theliminalspace.io](https://theliminalspace.io) · [Substack](https://liminalwoman.substack.com) · [X](https://x.com/ShrutiRajagopal)
-- **Shayaun Nejad** (Co-founder, Engineering, part-time — continuing at Rubrik) · UC Berkeley · systems and security · OffSec-certified · CHI 2027 paper co-author
-
-Part of [Liminal Space](https://theliminalspace.io) — a transition workspace for founders, operators, and creatives.

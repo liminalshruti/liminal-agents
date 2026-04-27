@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { runAllAgents, OPUS_MODEL } from "./agents/index.js";
+import { runAllAgents, AGENTS, OPUS_MODEL } from "./agents/index.js";
 import { synthesizeAcrossSnapshots } from "./synthesis.js";
 import { openDb, newId } from "./db.js";
 
@@ -9,11 +9,30 @@ function hashSnapshotIds(ids) {
   return createHash("sha256").update([...ids].sort().join("|")).digest("hex").slice(0, 24);
 }
 
-function inflateCachedReading(row) {
+function loadAgentViewsByReading(db, readingId) {
+  const rows = db
+    .prepare(`SELECT agent_key, register, interpretation FROM agent_views WHERE reading_id = ?`)
+    .all(readingId);
+  const byKey = {};
+  for (const r of rows) {
+    const a = AGENTS.find((x) => x.key === r.agent_key);
+    byKey[r.agent_key] = {
+      name: a?.name || r.agent_key,
+      key: r.agent_key,
+      register: r.register,
+      domain: a?.domain || "",
+      interpretation: r.interpretation,
+    };
+  }
+  return byKey;
+}
+
+function inflateCachedReading(db, row) {
   let snapshotIds = [];
   let threads = [];
   try { snapshotIds = JSON.parse(row.snapshot_ids); } catch {}
   try { threads = JSON.parse(row.threads); } catch {}
+  const byKey = loadAgentViewsByReading(db, row.id);
   return {
     reading_id: row.id,
     cached: true,
@@ -22,9 +41,7 @@ function inflateCachedReading(row) {
     snapshot_ids: snapshotIds,
     signal_summary: row.signal_summary,
     threads,
-    architect: { name: "Architect", key: "architect", domain: "structure, not feeling", interpretation: row.architect_view },
-    witness:   { name: "Witness",   key: "witness",   domain: "felt, not strategic",    interpretation: row.witness_view },
-    contrarian:{ name: "Contrarian",key: "contrarian",domain: "inversion, not balance", interpretation: row.contrarian_view },
+    agents: byKey,
     model: row.model,
     client_mode: row.client_mode,
   };
@@ -38,7 +55,7 @@ export function findCachedReadingForActiveVault({ model = OPUS_MODEL } = {}) {
   const row = db.prepare(
     `SELECT * FROM readings WHERE snapshot_ids_hash = ? AND model = ? ORDER BY timestamp DESC LIMIT 1`,
   ).get(hash, model);
-  return row ? inflateCachedReading(row) : null;
+  return row ? inflateCachedReading(db, row) : null;
 }
 
 export function listActiveSnapshots() {
@@ -80,13 +97,13 @@ export async function runReading({ client, mode, model = OPUS_MODEL, useCache = 
   }
 
   const hash = hashSnapshotIds(snapshots.map((s) => s.id));
+  const db = openDb();
 
   if (useCache) {
-    const db = openDb();
     const cached = db.prepare(
       `SELECT * FROM readings WHERE snapshot_ids_hash = ? AND model = ? ORDER BY timestamp DESC LIMIT 1`,
     ).get(hash, model);
-    if (cached) return inflateCachedReading(cached);
+    if (cached) return inflateCachedReading(db, cached);
   }
 
   const synthesis = await synthesizeAcrossSnapshots(client, snapshots, model);
@@ -97,31 +114,38 @@ export async function runReading({ client, mode, model = OPUS_MODEL, useCache = 
 
   const byKey = await runAllAgents(client, stateForAgents, contextForAgents, model);
 
-  const db = openDb();
   const readingId = newId();
   const now = Date.now();
   const snapshotIds = snapshots.map((s) => s.id);
 
-  db.prepare(
+  const insertReading = db.prepare(
     `INSERT INTO readings (
        id, timestamp, snapshot_ids, snapshot_ids_hash, snapshot_count,
-       signal_summary, threads, architect_view, witness_view, contrarian_view,
-       model, client_mode
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-  ).run(
-    readingId,
-    now,
-    JSON.stringify(snapshotIds),
-    hash,
-    snapshotIds.length,
-    synthesis.signal_summary,
-    JSON.stringify(synthesis.threads),
-    byKey.architect?.interpretation || null,
-    byKey.witness?.interpretation || null,
-    byKey.contrarian?.interpretation || null,
-    model,
-    mode || null,
+       signal_summary, threads, model, client_mode
+     ) VALUES (?,?,?,?,?,?,?,?,?)`,
   );
+  const insertView = db.prepare(
+    `INSERT INTO agent_views (reading_id, agent_key, register, interpretation) VALUES (?,?,?,?)`,
+  );
+
+  const tx = db.transaction(() => {
+    insertReading.run(
+      readingId,
+      now,
+      JSON.stringify(snapshotIds),
+      hash,
+      snapshotIds.length,
+      synthesis.signal_summary,
+      JSON.stringify(synthesis.threads),
+      model,
+      mode || null,
+    );
+    for (const agent of AGENTS) {
+      const r = byKey[agent.key];
+      if (r) insertView.run(readingId, agent.key, agent.register, r.interpretation);
+    }
+  });
+  tx();
 
   return {
     reading_id: readingId,
@@ -131,9 +155,7 @@ export async function runReading({ client, mode, model = OPUS_MODEL, useCache = 
     snapshot_ids: snapshotIds,
     signal_summary: synthesis.signal_summary,
     threads: synthesis.threads,
-    architect: byKey.architect,
-    witness: byKey.witness,
-    contrarian: byKey.contrarian,
+    agents: byKey,
     model,
     client_mode: mode || null,
   };
