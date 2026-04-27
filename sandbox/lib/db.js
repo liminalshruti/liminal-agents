@@ -4,11 +4,20 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const PROD_DB_PATH = join(here, "..", "liminal-agency.db");
+
 // DB path for the 12-agent agency surface. Uses a distinct filename
 // (liminal-agency.db) from the legacy 3-agent sandbox DB, so both can
 // coexist on disk if needed. No automatic migration happens — users with
 // data in the older liminal.db must inspect or export it manually.
-const DEFAULT_DB_PATH = process.env.LIMINAL_DB || join(here, "..", "liminal-agency.db");
+//
+// The env-var lookup is dynamic (resolved on each openDb call) so tests can
+// switch DBs between cases by mutating process.env.LIMINAL_DB + calling
+// _resetDbForTests(). Production callers don't pass `path` and the env
+// var is not normally set, so this resolves to PROD_DB_PATH.
+function resolveDefaultDbPath() {
+  return process.env.LIMINAL_DB || PROD_DB_PATH;
+}
 
 let _db = null;
 
@@ -59,7 +68,7 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS corrections_agent_tag ON corrections(agent, tag)`,
 ];
 
-export function openDb(path = DEFAULT_DB_PATH) {
+export function openDb(path = resolveDefaultDbPath()) {
   if (_db) return _db;
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
@@ -68,6 +77,16 @@ export function openDb(path = DEFAULT_DB_PATH) {
   for (const stmt of SCHEMA_STATEMENTS) db.prepare(stmt).run();
   _db = db;
   return db;
+}
+
+// Test-only helper: closes and clears the cached singleton so the next
+// openDb() call opens a fresh connection (or a different path). Production
+// code should never call this — the singleton is intentional.
+export function _resetDbForTests() {
+  if (_db) {
+    try { _db.close(); } catch {}
+    _db = null;
+  }
 }
 
 export function newId() {
