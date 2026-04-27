@@ -66,6 +66,44 @@ const SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS corrections_reading ON corrections(reading_id)`,
   `CREATE INDEX IF NOT EXISTS corrections_agent_tag ON corrections(agent, tag)`,
+
+  // ─── FTS5 virtual tables for retrieval (post-remediation #1) ───────────
+  // SQLite FTS5 is built into better-sqlite3 — no new dep. We use 'porter'
+  // tokenizer for stemming so "escalates" matches "escalation".
+  // Each FTS table mirrors the rowid + searchable fields of its source.
+  // We use external-content tables (content=...) so the FTS index doesn't
+  // duplicate the data; it just stores the inverted index.
+
+  `CREATE VIRTUAL TABLE IF NOT EXISTS snapshots_fts USING fts5(
+    text, label,
+    content='snapshots', content_rowid='rowid',
+    tokenize='porter unicode61'
+  )`,
+
+  // Triggers keep snapshots_fts in sync with snapshots without manual rebuild.
+  `CREATE TRIGGER IF NOT EXISTS snapshots_ai AFTER INSERT ON snapshots BEGIN
+    INSERT INTO snapshots_fts(rowid, text, label) VALUES (new.rowid, new.text, COALESCE(new.label, ''));
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS snapshots_ad AFTER DELETE ON snapshots BEGIN
+    INSERT INTO snapshots_fts(snapshots_fts, rowid, text, label) VALUES('delete', old.rowid, old.text, COALESCE(old.label, ''));
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS snapshots_au AFTER UPDATE ON snapshots BEGIN
+    INSERT INTO snapshots_fts(snapshots_fts, rowid, text, label) VALUES('delete', old.rowid, old.text, COALESCE(old.label, ''));
+    INSERT INTO snapshots_fts(rowid, text, label) VALUES (new.rowid, new.text, COALESCE(new.label, ''));
+  END`,
+
+  `CREATE VIRTUAL TABLE IF NOT EXISTS corrections_fts USING fts5(
+    note, tag, agent,
+    content='corrections', content_rowid='rowid',
+    tokenize='porter unicode61'
+  )`,
+
+  `CREATE TRIGGER IF NOT EXISTS corrections_ai AFTER INSERT ON corrections BEGIN
+    INSERT INTO corrections_fts(rowid, note, tag, agent) VALUES (new.rowid, COALESCE(new.note, ''), new.tag, new.agent);
+  END`,
+  `CREATE TRIGGER IF NOT EXISTS corrections_ad AFTER DELETE ON corrections BEGIN
+    INSERT INTO corrections_fts(corrections_fts, rowid, note, tag, agent) VALUES('delete', old.rowid, COALESCE(old.note, ''), old.tag, old.agent);
+  END`,
 ];
 
 export function openDb(path = resolveDefaultDbPath()) {
