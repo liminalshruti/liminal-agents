@@ -10,16 +10,28 @@ import { skeptic } from "./skeptic.js";
 import { operator } from "./operator.js";
 import { scheduler } from "./scheduler.js";
 import { bookkeeper } from "./bookkeeper.js";
+import { buildBoundedSystemPrompt } from "./bounded-system-prompt.js";
 
-// Twelve agency-flavored agents in four registers.
-// Order is canonical and must not be reordered casually — vault rows and the
-// orchestrator response shape both depend on it.
-export const AGENTS = [
+// Twelve agency-flavored agents in four registers, in a fixed canonical order.
+// The AGENTS array order determines the order of agent_views rows in the
+// database (agents are inserted in order during runReading), so reordering
+// breaks existing readings. Also affects API response shape. Do not reorder
+// without migrating existing readings.
+const AGENT_DEFS = [
   analyst, researcher, forensic,
   sdr, closer, liaison,
   auditor, strategist, skeptic,
   operator, scheduler, bookkeeper,
 ];
+
+// Compose final agents: each gets a `system` property built from its
+// hand-tuned `baseSystem` plus an auto-generated refusal allowlist + fourth-wall
+// guard. This is the single source of truth for the bounded-refusal protocol —
+// changing the helper updates every agent at once. See bounded-system-prompt.js.
+export const AGENTS = AGENT_DEFS.map((agent) => ({
+  ...agent,
+  system: buildBoundedSystemPrompt(agent, AGENT_DEFS),
+}));
 
 export const AGENT_KEYS = AGENTS.map((a) => a.key);
 
@@ -31,6 +43,9 @@ export function agentsByRegister() {
   return out;
 }
 
+// Re-export individual agents for direct import. Note these are the original
+// definitions WITHOUT the composed system prompt — for the runtime-ready
+// versions, import from AGENTS or AGENT_KEYS lookup instead.
 export {
   analyst, researcher, forensic,
   sdr, closer, liaison,

@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node bin/server.js",
-    "cli": "node bin/cli.js"
+    "cli": "node bin/cli.js",
+    "test": "node --test 'test/**/*.test.js'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
