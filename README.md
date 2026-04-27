@@ -32,8 +32,12 @@ Built for [**OSS4AI Hackathon #32**](https://lu.ma/) (Apr 26, 2026), extending t
 - **Real ingest, real disagreement.** Drop in 30 days of meeting notes / Claude Code sessions / commits — the vault populates, the agents disagree, and you correct what got you wrong.
 - **Local-first vault.** SQLite + WAL. Every reading, every correction, never leaves the device.
 - **Correction stream.** Pushback is first-party data. The vault grows with you; the agents do not.
+- **Retrieval (FTS5).** Query past snapshots and corrections by relevance: `POST /api/retrieve`. BM25-scored, agent/tag filterable.
+- **Tool use, scoped per-agent.** Analyst and Researcher (Diligence register) can call `fetch_url` for primary-source material. The other 10 agents have no tool access by design — capability differentiates agents at the substrate, not just the voice.
+- **Bounded re-read (refinement).** `POST /api/refine` re-runs ONE agent with extra user context. The other 11 agents are never consulted — the disagreement architecture is preserved. Refinements chain (intra-agent only); originals are preserved.
 - **HTTP API + Claude Code plugin.** Run the server (`npm start`), call `/api/read`, get 12 reads back. Or run the introspective `/check` skill via Claude Code.
 - **`claude -p` OAuth or `ANTHROPIC_API_KEY` — auth auto-detected.**
+- **83 tests.** `npm test` from `sandbox/`. Unit + integration; no live API calls.
 
 ## The five buyers
 
@@ -55,11 +59,11 @@ Each agent has a **domain** (what it must engage with) and an **anti-domain** (w
 
 ### Diligence — *what is known, what is hidden, what is verifiable*
 
-| Agent | In lane | Refuses |
-|---|---|---|
-| **Analyst** | What is known about the subject from primary sources | Outreach, ship/no-ship, scheduling |
-| **Researcher** | What is conspicuously absent or under-stated | Producing summaries, drafting messages |
-| **Forensic** | Comparing claims against receipts | Interpreting motive, proposing action |
+| Agent | In lane | Refuses | Tools |
+|---|---|---|---|
+| **Analyst** | What is known about the subject from primary sources | Outreach, ship/no-ship, scheduling | `fetch_url` |
+| **Researcher** | What is conspicuously absent or under-stated | Producing summaries, drafting messages | `fetch_url` |
+| **Forensic** | Comparing claims against receipts | Interpreting motive, proposing action | — |
 
 ### Outreach — *the move that ends in a relationship*
 
@@ -160,10 +164,40 @@ curl -X POST http://localhost:3000/api/read \
 
 That's it. 12 agents read, the vault stores, you can `POST /api/correction` against any of them.
 
+**Query the vault** (BM25 over snapshots + corrections):
+
+```bash
+curl -X POST http://localhost:3000/api/retrieve \
+     -H 'Content-Type: application/json' \
+     -d '{"query":"customer escalation", "limit":5}'
+```
+
+**Re-run a single agent with extra context** (bounded re-read):
+
+```bash
+curl -X POST http://localhost:3000/api/refine \
+     -H 'Content-Type: application/json' \
+     -d '{"reading_id":"<id>", "agent_key":"strategist",
+          "refinement":"the head of eng I am deferring is named Sean"}'
+```
+
 **Real-source ingest** (your own Granola meetings + Claude Code sessions):
 
 ```bash
 node bin/demo-prepare.js               # ingests last 30 days, primes cache
+```
+
+**Polished demo** (one command, instant from cache):
+
+```bash
+node bin/demo.js                       # register-grouped, color-coded output
+node bin/demo.js --fresh               # force a fresh read (~100s)
+```
+
+**Run the test suite:**
+
+```bash
+npm test                               # 83 tests, ~960ms
 ```
 
 See [`sandbox/API.md`](./sandbox/API.md) for the full endpoint reference.
@@ -178,12 +212,15 @@ sandbox/
 │   ├── server.js            Hono HTTP server (the API surface)
 │   ├── cli.js               CLI client
 │   ├── ingest.js            Real-source ingest (granola + claude-code)
-│   └── demo-prepare.js      One-shot demo prep (ingest + warm cache)
+│   ├── demo-prepare.js      One-shot demo prep (ingest + warm cache)
+│   └── demo.js              Polished register-grouped demo runner (post-OSS4AI)
 ├── lib/
 │   ├── agents/
-│   │   ├── index.js         12-agent registry, runAgent, runAllAgents
-│   │   ├── analyst.js       ── Diligence ──
-│   │   ├── researcher.js
+│   │   ├── index.js         12-agent registry, runAgent (with tool-use loop), runAllAgents
+│   │   ├── bounded-system-prompt.js  Auto-composes refusal allowlist + fourth-wall guard
+│   │   ├── validation.js    Runtime classification of agent output (refusal shape, etc.)
+│   │   ├── analyst.js       ── Diligence ── (tools: fetch_url)
+│   │   ├── researcher.js                    (tools: fetch_url)
 │   │   ├── forensic.js
 │   │   ├── sdr.js           ── Outreach ──
 │   │   ├── closer.js
@@ -194,23 +231,30 @@ sandbox/
 │   │   ├── operator.js      ── Operations ──
 │   │   ├── scheduler.js
 │   │   └── bookkeeper.js
+│   ├── tools/
+│   │   └── fetch_url.js     SSRF-guarded HTTPS fetch (Anthropic tool-use schema)
+│   ├── retrieve.js          BM25 retrieval over snapshots + corrections (FTS5)
+│   ├── refine.js            Bounded re-read of a single agent (intra-agent chain)
 │   ├── orchestrator.js      runReading() — fan out across 12, hash-cache, store
 │   ├── synthesis.js         Opus 4.7 compresses N snapshots → 1 paragraph + ≤3 threads
-│   ├── db.js                SQLite schema (snapshots, readings, agent_views, corrections)
+│   ├── db.js                SQLite schema (5 tables + 2 FTS5 virtual tables)
 │   ├── sources/granola.js   Granola cache reader (30-day window)
 │   ├── sources/claude-code.js  Claude Code session reader
 │   ├── correction-tags.js   The frozen 9-tag correction taxonomy
 │   ├── anthropic-client.js  API-key path with claude -p fallback
 │   └── seed.js              Demo seed snapshots
+├── test/                    83 tests covering registry, error handling, integration
 └── liminal-agency.db        Local vault (created on first run)
 ```
 
-**Five tables:**
+**Five core tables + two FTS virtual tables:**
 
 - `snapshots` — every signal you drop in (meetings, decisions, incidents, paste)
 - `readings` — one full pass: synthesis + 12 agent reads, hash-keyed by snapshot set
 - `agent_views` — *normalized* — one row per (reading, agent). Agent count is data, not schema.
 - `corrections` — user pushback, tagged from the canonical 9. Agents never read this. The record is the moat.
+- `refined_views` — bounded re-reads keyed by (reading, agent). Originals preserved; chain via `parent_refined_id`.
+- `snapshots_fts`, `corrections_fts` — SQLite FTS5 virtual tables, BM25-scored. Sync triggers keep them current.
 
 **Synthesize-then-read pipeline.** Opus 4.7 compresses N snapshots → 1 paragraph + ≤3 threads *before* the agents read. Each agent sees a compact, threaded picture of the situation, not raw transcripts. Cache invalidates by sha256 hash of snapshot IDs — re-reads on the same vault return in ~120ms vs. ~100s fresh.
 
@@ -220,7 +264,15 @@ sandbox/
 REFUSE: <correct agent name> · <one-sentence boundary>
 ```
 
-Agents **never read prior corrections.** By design. The correction loop does not converge. The record is the moat, not the agents.
+The allowlist of valid refusal targets and the fourth-wall guard are auto-generated by `bounded-system-prompt.js` from the 12-agent registry — single source of truth, no per-agent drift.
+
+**Bounded tool use.** Tools are scoped per-agent. Analyst and Researcher (Diligence register) can call `fetch_url`; the other 10 agents have no tool access. Asking SDR to fetch a URL produces a refusal-route to Analyst — capability is part of the bounded-agent definition. Tool calls run inside `runAgent`'s loop, bounded to 3 turns to prevent runaway.
+
+**Bounded re-read.** `POST /api/refine` invokes ONE agent again with extra user-provided context. The other 11 agents never see the refinement. Refinements chain via `parent_refined_id` (intra-agent only — chaining across agents is rejected). Original `agent_views` rows are preserved; refinements are additive. The disagreement architecture stays intact.
+
+**Partial-failure resilience.** `runAllAgents` uses `Promise.allSettled`, not `Promise.all`. If one of 12 agents fails (rate limit, malformed response, transient API error), the other 11's reads are still stored and the response includes an `agent_errors` field naming what failed and why. No silent loss of work.
+
+Agents **never read prior corrections** — that property is preserved through retrieval, tool use, and refinement. The correction loop does not converge. The record is the moat, not the agents.
 
 ---
 
@@ -242,6 +294,13 @@ curl -X POST http://localhost:3000/api/correction \
 ```
 
 Stored locally. Never sent. The semantic delta between *what the agents said* and *what you experienced* is a first-party data category that neither RLHF preference data nor user-generated content captures.
+
+**Two paths from a correction:**
+
+1. **Pure record** — `POST /api/correction`. Tagged pushback stored against an agent's read. Agents never see this. Compounds across sessions. The moat.
+2. **Bounded re-read** — `POST /api/refine`. Same correction shape, but actually runs the agent again with the pushback baked in as user context. The agent re-reads its own (and only its own) prior interpretation; other agents are not consulted. The chain is queryable via `GET /api/refinements/<reading_id>/<agent_key>`. Originals are preserved.
+
+**Querying the moat** — `POST /api/retrieve` runs BM25 over snapshots and corrections together. Filter corrections by `agent` or `tag` to surface every time the Strategist got `wrong_frame` on customer-X material. The vault becomes inspectable without surfacing it to the agents (which would force convergence).
 
 ---
 

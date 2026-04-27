@@ -1,6 +1,6 @@
 # Liminal Sandbox — Backend API
 
-JSON HTTP API. Localhost only. CORS open for any origin (TUI is expected to call from the same machine).
+JSON HTTP API. Localhost only. CORS open for any origin (the TUI is expected to call from the same machine).
 
 ## Run
 
@@ -16,19 +16,33 @@ If `ANTHROPIC_API_KEY` is unset and `claude` CLI is on PATH, the backend falls b
 
 ## Data model
 
-Three tables in `liminal.db` (SQLite, WAL mode, located next to `package.json` by default; override with `LIMINAL_DB`).
+Five core tables + two FTS5 virtual tables in `liminal-agency.db` (SQLite, WAL mode, located next to `package.json` by default; override with `LIMINAL_DB`).
 
 - `snapshots(id, timestamp, kind, text, label, archived)` — items dropped into the vault. `kind ∈ {meeting, decision, incident, paste}`. `archived = 1` hides from active vault but preserves history.
-- `readings(id, timestamp, snapshot_ids, snapshot_count, signal_summary, threads, architect_view, witness_view, contrarian_view, model, client_mode)` — one full pass: synthesis + three bounded-agent reads.
-- `corrections(id, reading_id, agent, tag, note, timestamp)` — user pushback on a specific agent's read in a reading. `agent ∈ {architect, witness, contrarian}`. `tag ∈ ` the canonical 9 (see `/api/tags`).
+- `readings(id, timestamp, snapshot_ids, snapshot_ids_hash, snapshot_count, signal_summary, threads, model, client_mode)` — one full pass: synthesis + N agent reads, hash-keyed by sorted snapshot ID list.
+- `agent_views(reading_id, agent_key, register, interpretation)` — *normalized*: one row per (reading, agent). Agent count is data, not schema. Primary key is `(reading_id, agent_key)`.
+- `corrections(id, reading_id, agent, tag, note, timestamp)` — user pushback on a specific agent's read. `agent ∈ ` the 12 canonical keys. `tag ∈ ` the canonical 9 (see `/api/tags`).
+- `refined_views(id, reading_id, agent_key, refinement_input, interpretation, timestamp, parent_refined_id)` — bounded re-reads. Originals in `agent_views` are preserved; refinements are additive. Chains via `parent_refined_id` (intra-agent only).
+- `snapshots_fts`, `corrections_fts` — SQLite FTS5 virtual tables for `/api/retrieve`. BM25-scored. Sync triggers on INSERT/UPDATE/DELETE keep them current.
 
 `readings.snapshot_ids` and `readings.threads` are stored as JSON strings in the DB but always returned as arrays in API responses.
+
+## The 12 canonical agent keys
+
+```
+analyst   researcher   forensic        ── Diligence ──   (tools: fetch_url)
+sdr       closer       liaison         ── Outreach
+auditor   strategist   skeptic         ── Judgment
+operator  scheduler    bookkeeper      ── Operations
+```
+
+Refusal protocol: when out of lane, agents respond with exactly `REFUSE: <AgentName> · <one-sentence boundary>`. Validation happens at runtime (see `lib/agents/validation.js`); malformed refusals are logged but not rejected.
 
 ## Endpoints
 
 ### `GET /api/health`
 
-Simple liveness probe.
+Liveness probe.
 
 ```json
 { "ok": true, "service": "liminal-sandbox", "version": "0.1.0" }
@@ -43,11 +57,7 @@ Canonical correction taxonomy. Frozen — do not display tags not in this list.
   "tags": ["wrong_frame", "wrong_intensity", "wrong_theory",
            "right_but_useless", "right_but_already_known", "too_generic",
            "missed_compensation", "assumes_facts_not_in_evidence", "off_by_layer"],
-  "descriptions": {
-    "wrong_frame": "The agent used the wrong lens entirely.",
-    "wrong_intensity": "The reading was too strong or too weak.",
-    "...": "..."
-  }
+  "descriptions": { "wrong_frame": "...", "wrong_intensity": "...", "...": "..." }
 }
 ```
 
@@ -59,8 +69,7 @@ Active (non-archived) vault, oldest-first by timestamp.
 {
   "snapshots": [
     { "id": "...", "timestamp": 1714073280000, "kind": "meeting",
-      "text": "1:1 with Maya — she said the team is asking what we are doing about Eric.",
-      "label": "1:1 with Maya" }
+      "text": "Customer X escalated...", "label": "Customer X" }
   ]
 }
 ```
@@ -71,36 +80,31 @@ Drop a snapshot into the vault.
 
 Request:
 ```json
-{ "kind": "meeting|decision|incident|paste", "text": "<freeform>", "label": "<optional short name>" }
+{ "kind": "meeting|decision|incident|paste", "text": "...", "label": "<optional>", "timestamp": <optional> }
 ```
 
-`kind` is required and must be one of the four values. `text` is required, no length cap enforced server-side, but synthesis truncates each snapshot at 800 chars.
+Response: `{ "ok": true, "snapshot": { "id": "...", "timestamp": ..., "kind": "...", "text": "...", "label": "..." } }`.
 
-Response:
-```json
-{ "ok": true, "snapshot": { "id": "...", "timestamp": ..., "kind": "...", "text": "...", "label": null } }
-```
-
-400 errors: missing kind/text, invalid kind.
-
-### `DELETE /api/snapshots/:id`
-
-Archive a single snapshot. Idempotent. Always returns 200 with `{ ok: <bool> }`. `ok: false` means no row matched.
+Errors: 400 on missing/invalid `kind` or `text`.
 
 ### `POST /api/snapshots/clear`
 
-Archive everything in the vault. Returns `{ ok: true }`. Past readings still reference these IDs but the vault appears empty.
+Archives every active snapshot. `{ "ok": true }`. Does not delete (preserves history).
 
 ### `POST /api/seed`
 
-Demo helper. Clears the vault then drops 5 founder-flavored sample snapshots (cofounder friction, postponed offer, sleep note, missed standup, customer escalation). Returns `{ ok: true, count: 5 }`. Useful for the TUI's "Load demo" affordance.
+Seeds the vault with 5 demo snapshots (Customer X escalation, Eric absence, head-of-eng deferred, sleep loss). Useful for testing without real data.
+
+```json
+{ "ok": true, "count": 5 }
+```
 
 ### `POST /api/read`
 
-Run a reading across the entire active vault. Synchronous — returns when all four model calls finish.
+Run a reading across the entire active vault. Synchronous — returns when synthesis + all 12 agent calls finish. Cache-keyed by `(snapshot_ids_hash, model)` — re-reads on the same vault return in ~120ms.
 
-- API mode: ~5–10s for synthesis + three parallel agent calls.
-- CLI mode: ~75–120s (calls serialize through a single-flight queue).
+- API mode: ~30–60s for synthesis + 12 parallel agent calls.
+- CLI mode: ~100–180s (calls serialize through a single-flight queue).
 
 No request body required. Implicitly uses every active snapshot.
 
@@ -108,22 +112,32 @@ Response:
 ```json
 {
   "reading_id": "...",
+  "cached": false,
   "timestamp": 1714073280000,
   "snapshot_count": 5,
   "snapshot_ids": ["...", "..."],
-  "signal_summary": "<one paragraph synthesis from Opus 4.7>",
-  "threads": [
-    { "label": "...", "snapshot_ids": ["..."], "summary": "..." }
-  ],
-  "architect":   { "name": "Architect",   "key": "architect",   "domain": "structure, not feeling",  "interpretation": "..." },
-  "witness":     { "name": "Witness",     "key": "witness",     "domain": "felt, not strategic",    "interpretation": "..." },
-  "contrarian":  { "name": "Contrarian",  "key": "contrarian",  "domain": "inversion, not balance", "interpretation": "..." },
+  "signal_summary": "<one paragraph from Opus 4.7>",
+  "threads": [{ "label": "...", "snapshot_ids": ["..."], "summary": "..." }],
+  "agents": {
+    "analyst":    { "name": "Analyst",    "key": "analyst",    "register": "Diligence",  "domain": "...", "interpretation": "...", "classification": "prose", "tool_turns": 0 },
+    "researcher": { "name": "Researcher", "key": "researcher", "register": "Diligence",  "domain": "...", "interpretation": "...", "classification": "prose", "tool_turns": 0 },
+    "...":        { "...": "..." }
+  },
+  "agent_errors": [],
   "model": "claude-opus-4-7",
   "client_mode": "api"
 }
 ```
 
-Errors: 400 if vault is empty (`vault is empty — drop at least one snapshot before reading`), 500 if no Anthropic credential or the model call fails.
+Per-agent fields:
+- `interpretation` — the agent's text output (or empty string on error).
+- `classification` — `"prose" | "valid_refusal" | "malformed_refusal" | "unknown_target" | "empty"`.
+- `tool_turns` — count of tool-use cycles the agent ran (0 unless agent has `fetch_url` and used it).
+- On failure, the agent entry has `error: true`, `error_reason: "..."`, and `interpretation: ""`. The agent is also listed in `agent_errors`.
+
+`agent_errors` is `[]` when all 12 succeed; populated with `{ agent_key, reason }` per failure. Failed agents are not stored as `agent_views` rows. The reading row is still stored even if all 12 agents fail — preserves the audit trail.
+
+Errors: 400 if vault is empty, 401 on missing/invalid Anthropic credential, 500 on synthesis failure or other runtime errors. All errors include a `remediation` field.
 
 ### `GET /api/readings?limit=25`
 
@@ -140,7 +154,7 @@ Recent readings, newest-first. `limit` clamped to 100. No interpretations includ
 
 ### `GET /api/readings/:id`
 
-Full reading + all corrections filed on it.
+Full reading + all corrections filed on it. Agents block now keyed by agent_key (not the legacy hardcoded fields).
 
 ```json
 {
@@ -150,36 +164,137 @@ Full reading + all corrections filed on it.
   "snapshot_ids": ["..."],
   "signal_summary": "...",
   "threads": [...],
-  "architect": { "interpretation": "..." },
-  "witness": { "interpretation": "..." },
-  "contrarian": { "interpretation": "..." },
+  "agents": {
+    "analyst":    { "key": "analyst",    "register": "Diligence",  "interpretation": "..." },
+    "researcher": { "key": "researcher", "register": "Diligence",  "interpretation": "..." },
+    "...":        { "...": "..." }
+  },
   "model": "...",
   "client_mode": "...",
   "corrections": [
-    { "id": "...", "agent": "architect", "tag": "missed_compensation", "note": null, "timestamp": ... }
+    { "id": "...", "agent": "analyst", "tag": "missed_compensation", "note": null, "timestamp": ... }
   ]
 }
 ```
 
-404 if the reading id is unknown.
+404 if `reading_id` is unknown.
 
 ### `POST /api/correction`
 
-File a correction on a specific agent's read in a reading.
+File a correction on a specific agent's read. Stored locally; agents never read corrections.
 
 Request:
 ```json
-{ "reading_id": "...", "agent": "architect|witness|contrarian", "tag": "<one of the 9>", "note": "<optional>" }
+{ "reading_id": "...", "agent": "<one of the 12 keys>", "tag": "<one of the 9>", "note": "<optional>" }
 ```
+
+Response: `{ "ok": true, "correction_id": "..." }`.
+
+Errors:
+- 400 missing fields — response includes `required: ["reading_id", "agent", "tag"]` and `optional: ["note"]`.
+- 400 bad agent — response includes `valid_agents: [...]` (all 12 keys).
+- 400 invalid tag — response includes `valid_tags: [...]` (all 9 tags).
+- 404 unknown `reading_id`.
+- 500 if the DB insert fails — response includes `remediation: "check server logs"`.
+
+Multiple corrections can be filed on the same `(reading_id, agent)`. The TUI tracks "applied" state locally; aggregate correction shape is in `/api/doctrine`.
+
+### `POST /api/refine`
+
+Bounded re-read of a single agent. Re-runs ONE agent on the same synthesis with extra user-provided context. The other 11 agents are NOT consulted — the disagreement architecture is preserved. Original `agent_views` rows are preserved; refinements are stored in `refined_views`.
+
+Request:
+```json
+{
+  "reading_id": "...",
+  "agent_key": "<one of the 12 keys>",
+  "refinement": "the head of eng I'm deferring is named Sean",
+  "parent_refined_id": "<optional, to chain refinements>"
+}
+```
+
+Chain semantics: pass `parent_refined_id` to continue the same agent's iteration on a previous refinement. Cross-agent chaining is rejected at the boundary (parent must be from the same `agent_key`).
 
 Response:
 ```json
-{ "ok": true, "correction_id": "..." }
+{
+  "ok": true,
+  "refined_id": "...",
+  "reading_id": "...",
+  "agent_key": "strategist",
+  "parent_refined_id": null,
+  "interpretation": "<the agent's refined read>",
+  "classification": "prose",
+  "tool_turns": 0,
+  "timestamp": 1714073280000,
+  "client_mode": "api"
+}
 ```
 
-Errors: 400 missing fields, 400 bad agent, 400 invalid tag, 404 unknown reading_id.
+Errors:
+- 400 missing fields, invalid `agent_key`, empty `refinement`.
+- 401 missing Anthropic credential.
+- 404 unknown `reading_id` or unknown `parent_refined_id`.
 
-Multiple corrections can be filed on the same `(reading_id, agent)` — they all stick. The TUI should show "applied" state by tracking which `(agent, tag)` pairs the user has clicked locally; the doctrine endpoint aggregates server-side.
+### `GET /api/refinements/:reading_id/:agent_key`
+
+List the refinement chain for a `(reading, agent)` pair, oldest first.
+
+```json
+{
+  "reading_id": "...",
+  "agent_key": "strategist",
+  "refinements": [
+    { "id": "...", "refinement_input": "...", "interpretation": "...", "timestamp": ..., "parent_refined_id": null },
+    { "id": "...", "refinement_input": "...", "interpretation": "...", "timestamp": ..., "parent_refined_id": "<previous>" }
+  ]
+}
+```
+
+Returns `refinements: []` when no refinements have been done for that pair.
+
+### `POST /api/retrieve`
+
+BM25 retrieval over snapshots and/or corrections via SQLite FTS5. Default tokenizer sanitizes input by quoting each token (defense against FTS5 operator injection); pass `raw: true` for advanced queries (boolean operators, NEAR, etc.).
+
+Request:
+```json
+{
+  "query": "customer escalation",
+  "limit": 10,
+  "kind": "all",
+  "agent": "analyst",
+  "tag": "wrong_frame",
+  "raw": false
+}
+```
+
+- `query` — required.
+- `kind` — `"snapshots" | "corrections" | "all"` (default `"all"`).
+- `limit` — 1–50 (default 10, clamped).
+- `agent` / `tag` — filter corrections (ignored when `kind: "snapshots"`).
+- `raw` — pass `true` to skip the tokenizer sanitization (advanced).
+
+Response (when `kind: "all"`):
+```json
+{
+  "query": "customer escalation",
+  "snapshots": [
+    { "id": "...", "timestamp": ..., "kind": "incident", "text": "Customer X escalated...",
+      "label": "...", "archived": 0, "score": -3.21 }
+  ],
+  "corrections": [
+    { "id": "...", "reading_id": "...", "agent": "analyst", "tag": "wrong_frame",
+      "note": "missed customer X recurrence", "timestamp": ..., "score": -2.04 }
+  ]
+}
+```
+
+Score is BM25; lower (more negative) is better. Results are pre-sorted best-first.
+
+Errors:
+- 400 missing/empty `query` — response includes an `example` payload.
+- 400 invalid `kind`.
 
 ### `GET /api/doctrine`
 
@@ -188,12 +303,12 @@ Aggregated correction stats. The "moat" view.
 ```json
 {
   "by_agent_tag": [
-    { "agent": "architect", "tag": "missed_compensation", "count": 5 },
-    { "agent": "witness",   "tag": "too_generic",         "count": 3 }
+    { "agent": "analyst", "tag": "missed_compensation", "count": 5 },
+    { "agent": "skeptic", "tag": "too_generic",         "count": 3 }
   ],
   "by_agent": [
-    { "agent": "architect", "count": 6 },
-    { "agent": "witness",   "count": 3 }
+    { "agent": "analyst", "count": 6 },
+    { "agent": "skeptic", "count": 3 }
   ],
   "total_readings": 4,
   "total_corrections": 11,
@@ -201,18 +316,49 @@ Aggregated correction stats. The "moat" view.
 }
 ```
 
-Use `by_agent_tag` for the bar list. The header chrome can show `total_readings`, `total_corrections`, `active_snapshots`.
+## Tools (per-agent capabilities)
 
-## Conventions
+Tools are scoped per-agent. Each agent's `tools` array on its registry entry declares which tools the orchestrator passes to the Anthropic API for that agent. Other agents do NOT see the tool, cannot call it, and refuse out-of-lane requests instead.
 
-- **IDs** are short base36 strings: `<timestamp>-<random>`. Treat as opaque.
-- **Timestamps** are integer ms since epoch (`Date.now()`), UTC. Render with the user's local timezone.
-- **All responses are JSON.** Errors come back as `{ "error": "<message>" }` with appropriate HTTP status. There is no error code field — the message is the contract.
-- **No auth.** Localhost only. If you bind to non-localhost, add auth — there is none today.
-- **No streaming.** `/api/read` returns one final JSON when all four model calls finish. If you want progressive paint in the TUI, fire `/api/read` and start an interval poll on `/api/readings?limit=1` — once the new reading_id appears, fetch its detail. Or just spin a "three reads in flight…" indicator until the response lands; that's the simpler path.
+Currently registered:
 
-## Two-call Read pattern (recommended for TUI)
+| Tool | Schema | Available to |
+|---|---|---|
+| `fetch_url` | `{ url: string }` — fetch a public HTTPS URL | Analyst, Researcher |
 
-`POST /api/read` is the simplest. It blocks until done. Total time = synthesis + max(3 agent calls).
+`fetch_url` runs through SSRF-guarded `lib/tools/fetch_url.js`:
+- Rejects non-http(s) protocols, RFC1918 private IPv4, IPv6 loopback/ULA/link-local, `localhost`/`*.local`/`*.internal` hostnames.
+- 8s timeout, 32KB max response, redirects not followed (manual mode — protects against SSRF-via-30x).
+- HTML responses get text stripped before being returned to the agent.
 
-If your TUI wants per-agent paint-in (synthesis → architect → witness → contrarian, each appearing as it lands), the backend doesn't support that yet — call out and we'll add a streaming variant or a snapshot-then-poll split. Out of scope for tonight.
+Tool-use loop bounded to 3 turns per agent (configurable in `lib/agents/index.js`). The agent's `tool_turns` count is surfaced in the reading response.
+
+## Observability
+
+All errors logged to stderr with `[context]` prefix:
+- `[runReading]` — orchestrator-level errors (synthesis failure, partial agent failures).
+- `[runAllAgents]` — per-agent failure counts and reasons.
+- `[runAgent <key>]` — single-agent classification warnings (malformed refusal, unknown target).
+- `[synthesis]` — JSON parse failures, missing text blocks.
+- `[inflateCachedReading <id>]` — corrupted cache row JSON.
+- `[/api/<endpoint>]` — endpoint-level errors with stop_reason / status / etc.
+
+Server error responses include a `remediation` field where a concrete next step exists (e.g., "set ANTHROPIC_API_KEY", "POST /api/snapshots first", "check your API key").
+
+## Tests
+
+```bash
+npm test                                          # 83 tests, ~960ms
+```
+
+Coverage:
+- Bounded-prompt composition + refusal validation (17 tests)
+- Promise.allSettled error handling + synthesis fallbacks (13 tests)
+- CLI shim timeout / stderr / serialization (6 tests)
+- Orchestrator integration: 12-row insertion, partial failures, cache keying (9 tests)
+- HTTP endpoint validation (6 tests)
+- FTS5 retrieval + sync triggers (12 tests)
+- Tool use + per-agent scoping + SSRF guards (12 tests)
+- Refinement chain semantics (8 tests)
+
+All tests use mocked Anthropic clients — no live API calls, no credential needed.
