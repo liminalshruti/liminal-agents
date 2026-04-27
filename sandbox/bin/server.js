@@ -15,6 +15,7 @@ import {
 import { seedDemoVault } from "../lib/seed.js";
 import { AGENT_KEYS, REGISTERS, agentsByRegister } from "../lib/agents/index.js";
 import { retrieveAll, retrieveSnapshots, retrieveCorrections } from "../lib/retrieve.js";
+import { refineAgentRead, getRefinementChain } from "../lib/refine.js";
 
 const app = new Hono();
 
@@ -181,6 +182,64 @@ app.post("/api/correction", async (c) => {
   }
 
   return c.json({ ok: true, correction_id: id });
+});
+
+// ── Refinement (bounded re-read of a single agent) ────────────────────────
+// POST /api/refine { reading_id, agent_key, refinement, parent_refined_id? }
+//   Re-runs ONE agent on the same synthesis with extra user-provided context.
+//   Other agents are NOT consulted — bounded multi-agent claim preserved.
+//   parent_refined_id chains refinements: pass the previous refined_id to
+//   continue the same agent's iteration.
+app.post("/api/refine", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { reading_id, agent_key, refinement, parent_refined_id = null } = body;
+  if (!reading_id || !agent_key || !refinement) {
+    return c.json({
+      error: "need reading_id, agent_key, refinement",
+      required: ["reading_id", "agent_key", "refinement"],
+      optional: ["parent_refined_id"],
+    }, 400);
+  }
+  if (!AGENT_KEYS.includes(agent_key)) {
+    return c.json({
+      error: "agent_key must be one of the 12 canonical agent keys",
+      received: agent_key,
+      valid_agents: AGENT_KEYS,
+    }, 400);
+  }
+  const { client, mode } = makeClient();
+  if (!client) {
+    return c.json({
+      error: "no Anthropic credential found",
+      remediation: "set ANTHROPIC_API_KEY or run `claude setup-token`",
+    }, 401);
+  }
+  try {
+    const result = await refineAgentRead({
+      client,
+      readingId: reading_id,
+      agentKey: agent_key,
+      refinement,
+      parentRefinedId: parent_refined_id,
+    });
+    return c.json({ ok: true, ...result, client_mode: mode });
+  } catch (e) {
+    console.error(`[/api/refine] ${e.message}`);
+    const status = /not found/.test(e.message) ? 404 : 400;
+    return c.json({ error: e.message }, status);
+  }
+});
+
+// GET /api/refinements/:reading_id/:agent_key — list the refinement chain
+// for a (reading, agent), oldest first.
+app.get("/api/refinements/:reading_id/:agent_key", (c) => {
+  const reading_id = c.req.param("reading_id");
+  const agent_key = c.req.param("agent_key");
+  if (!AGENT_KEYS.includes(agent_key)) {
+    return c.json({ error: "invalid agent_key", valid_agents: AGENT_KEYS }, 400);
+  }
+  const chain = getRefinementChain(reading_id, agent_key);
+  return c.json({ reading_id, agent_key, refinements: chain });
 });
 
 // ── Retrieval (FTS5 over snapshots + corrections) ──────────────────────────
