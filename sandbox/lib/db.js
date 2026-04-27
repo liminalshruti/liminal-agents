@@ -4,8 +4,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-// New DB path for the 12-agent agency surface — leaves the legacy
-// 3-agent introspective DB undisturbed so users can still inspect old runs.
+// DB path for the 12-agent agency surface. Uses a distinct filename
+// (liminal-agency.db) from the legacy 3-agent sandbox DB, so both can
+// coexist on disk if needed. No automatic migration happens — users with
+// data in the older liminal.db must inspect or export it manually.
 const DEFAULT_DB_PATH = process.env.LIMINAL_DB || join(here, "..", "liminal-agency.db");
 
 let _db = null;
