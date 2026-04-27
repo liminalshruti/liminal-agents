@@ -67,6 +67,24 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS corrections_reading ON corrections(reading_id)`,
   `CREATE INDEX IF NOT EXISTS corrections_agent_tag ON corrections(agent, tag)`,
 
+  // ─── refined_views (post-remediation #3) ───────────────────────────────
+  // Bounded re-read: a SINGLE agent is invoked a second time with extra
+  // user-provided context (a "refinement"). Other agents are NOT consulted
+  // — the bounded-multi-agent claim is preserved. The refined interpretation
+  // is stored linked to the original agent_view, not replacing it; the
+  // record of the original read is preserved for audit + IP evidence.
+  `CREATE TABLE IF NOT EXISTS refined_views (
+    id TEXT PRIMARY KEY,
+    reading_id TEXT NOT NULL REFERENCES readings(id) ON DELETE CASCADE,
+    agent_key TEXT NOT NULL CHECK (agent_key IN ${AGENT_KEYS_CHECK}),
+    refinement_input TEXT NOT NULL,
+    interpretation TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    parent_refined_id TEXT REFERENCES refined_views(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS refined_views_reading ON refined_views(reading_id, agent_key)`,
+  `CREATE INDEX IF NOT EXISTS refined_views_timestamp ON refined_views(timestamp DESC)`,
+
   // ─── FTS5 virtual tables for retrieval (post-remediation #1) ───────────
   // SQLite FTS5 is built into better-sqlite3 — no new dep. We use 'porter'
   // tokenizer for stemming so "escalates" matches "escalation".
