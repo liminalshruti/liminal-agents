@@ -112,8 +112,13 @@ test("correction tag list has exactly nine tags and validates strictly", () => {
   assert.equal(isValidTag("not_a_tag"), false);
 });
 
-test("agent names are the three bounded roles", () => {
-  assert.deepEqual(AGENT_NAMES, ["Analyst", "SDR", "Auditor"]);
+test("AGENT_NAMES exports the introspective set (the thesis-anchoring substrate)", () => {
+  // Per the dual-agent-set decision in lib/agents/index.js: AGENT_NAMES
+  // defaults to the INTROSPECTIVE set (Architect/Witness/Contrarian) —
+  // used by /check and /close. The agency set (Analyst/SDR/Auditor) is
+  // exported separately as AGENCY_AGENT_NAMES and used by /agency.
+  // The 12-agent OSS4AI surface lives in sandbox/ with its own registry.
+  assert.deepEqual(AGENT_NAMES, ["Architect", "Witness", "Contrarian"]);
 });
 
 test("writing a correction via db enforces referential shape", async () => {

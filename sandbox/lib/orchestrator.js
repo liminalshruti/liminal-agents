@@ -5,7 +5,9 @@ import { openDb, newId } from "./db.js";
 
 function hashSnapshotIds(ids) {
   // Sorted to make order irrelevant; the synthesis treats the vault as a set.
-  // Hash also includes model so changing model invalidates cache.
+  // NOTE: Hash does NOT include the model. Cache lookup uses (hash, model) as
+  // a composite key in the SELECT WHERE clause (see findCachedReadingForActiveVault),
+  // so changing model still invalidates the cache — just via a different mechanism.
   return createHash("sha256").update([...ids].sort().join("|")).digest("hex").slice(0, 24);
 }
 
