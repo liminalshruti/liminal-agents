@@ -79,10 +79,25 @@ const contextForAgents = threads
   .join("\n");
 
 // /close is end-of-day synthesis on today's signals — same introspective
-// substrate as /check. Pass Architect/Witness/Contrarian explicitly.
-const byName = await runAllAgents(client, stateForAgents, contextForAgents, {
+// substrate as /check. Pass the full 12-agent set explicitly; legacy
+// columns (architect_view / witness_view / contrarian_view) get the 3
+// canonical reads, the rest land in agent_views.
+//
+// runAllAgents returns { byName, errors } per the partial-result contract
+// (see lib/agents/index.js). The destructure matters — flat assignment
+// would land [object Object] / null pairs in the vault.
+const { byName, errors } = await runAllAgents(client, stateForAgents, contextForAgents, {
   agents: INTROSPECTIVE_AGENTS,
 });
+
+if (errors.length > 0) {
+  console.error(
+    `[/close] ${errors.length}/${INTROSPECTIVE_AGENTS.length} agents failed; storing partial deliberation`,
+  );
+  for (const e of errors) {
+    console.error(`  - ${e.agent_name}: ${e.reason}`);
+  }
+}
 
 const deliberationId = newId();
 const now = Date.now();
@@ -97,10 +112,26 @@ db.prepare(
   JSON.stringify(signals.map((s) => s.id)),
   signal_summary,
   contextForAgents,
-  byName["Architect"] || null,
-  byName["Witness"] || null,
-  byName["Contrarian"] || null,
+  byName["Architect"]?.interpretation || null,
+  byName["Witness"]?.interpretation || null,
+  byName["Contrarian"]?.interpretation || null,
 );
+
+// Also write all 12 agents to agent_views (normalized) so /close
+// and /check store the same shape — addresses C3 partial-normalization.
+const insertView = db.prepare(
+  `INSERT OR REPLACE INTO agent_views (deliberation_id, agent_name, register, interpretation, schema_version)
+   VALUES (?, ?, ?, ?, 1)`,
+);
+const tx = db.transaction(() => {
+  for (const agent of INTROSPECTIVE_AGENTS) {
+    const r = byName[agent.name];
+    if (r && !r.error && r.interpretation) {
+      insertView.run(deliberationId, agent.name, agent.register, r.interpretation);
+    }
+  }
+});
+tx();
 
 if (surfacingId) {
   db.prepare(
@@ -118,9 +149,10 @@ console.log(
       signal_count: signals.length,
       signal_summary,
       threads,
-      architect: { interpretation: byName["Architect"] },
-      witness: { interpretation: byName["Witness"] },
-      contrarian: { interpretation: byName["Contrarian"] },
+      architect: { interpretation: byName["Architect"]?.interpretation || null },
+      witness: { interpretation: byName["Witness"]?.interpretation || null },
+      contrarian: { interpretation: byName["Contrarian"]?.interpretation || null },
+      agent_errors: errors,
     },
     null,
     2,

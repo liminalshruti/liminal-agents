@@ -83,18 +83,22 @@ test("every introspective agent's system prompt includes the refusal-protocol gu
   }
 });
 
-test("each introspective agent's allowlist names exactly the 11 OTHER agents (not itself)", () => {
+test("each introspective agent's allowlist matches the c-hard-iii bound (geometry-bound vector occupants OR vector-isolated full set)", async () => {
+  // Pre-c-hard-iii this test asserted the allowlist contained all 11
+  // other agents. Under c-hard-iii (CHARD3_PLAN.md, Option A) the bound
+  // is geometry-derived: vector occupants only for typed agents with
+  // ≥1 occupant, full allowlist for vector-isolated agents.
+  const { describeBound } = await import("../lib/agents/bounded-system-prompt.js");
+
   for (const a of INTROSPECTIVE_AGENTS) {
     const allowlistMatch = a.system.match(/agent names only: ([^\.]+)\./);
     assert.ok(allowlistMatch, `${a.name} should have a parseable allowlist`);
     const allowlistNames = allowlistMatch[1].split(",").map((s) => s.trim()).sort();
-    const expectedOthers = INTROSPECTIVE_AGENT_NAMES
-      .filter((n) => n !== a.name)
-      .sort();
+    const expected = describeBound(a, INTROSPECTIVE_AGENTS).bound;
     assert.deepEqual(
       allowlistNames,
-      expectedOthers,
-      `${a.name} allowlist should be the other 11 names`,
+      expected,
+      `${a.name} allowlist drift — expected ${describeBound(a, INTROSPECTIVE_AGENTS).kind} bound`,
     );
   }
 });
