@@ -11,7 +11,7 @@ short. Read alongside `ARCHITECTURE.md` (synthesis surface),
 
 ---
 
-## Three structural claims
+## Four structural claims
 
 ### Claim 1 — Bounded Agent Refusal Architecture (PPA #4)
 
@@ -155,6 +155,54 @@ request-level cache.
 re-read on identical vault state: ~0.12s (~500-750× speedup on the warm
 path). Empirical, sandbox surface only on `main` today; merges to the
 introspective substrate when the sandbox→main consolidation completes.
+
+---
+
+### Claim 4 — Structural Unilateral Privacy of the Contested-Reads Substrate (PPA #6 candidate)
+
+The substrate enforces three named invariants that together make
+vault content structurally unreadable to anyone but the user — not by
+policy, but by architecture: (1) no vault row traverses Liminal-
+controlled infrastructure (there is none); (2) the vault encryption
+key is generated locally, held in the device secure element where
+available, and zeroized after every cipher pragma application — the
+key never reaches Liminal under any code path; (3) all outbound
+network calls flow through two named, audited chokepoints (`safeFetch`
++ Anthropic SDK), with the test suite failing on the introduction of
+any third path.
+
+**Why novel.** Cloud-first AI products *promise* not to read user
+data; Liminal makes the promise architectural. The contested-reads
+data category — typed longitudinal records of how the user disagreed
+with the agents' interpretations of their own state — depends on a
+holding container the user can trust with material they wouldn't
+share with a human. The privacy property is the *precondition* for
+the data category existing; without it, users self-censor at intake
+and the four-position emergence pattern never arises. The single
+sentence that compresses the claim:
+
+> The source application sees a window-paste event. EDR sees the user
+> using their tools normally. Liminal's read against those tools never
+> leaves the device — except as inputs to a Claude API call the user
+> authorized with their own credential.
+
+**Where enforced in code.**
+
+| Element | File | Lines |
+|---|---|---|
+| Three named invariants + qualifier (Anthropic API surface honesty) | `PRIVACY_INVARIANTS.md` | full file |
+| I1 — no Liminal-domain in network code | `test/privacy-invariants.test.js` | Test 1 |
+| I2 — key release modes local-only + zeroize | `lib/vault/keyguard.js`, `lib/vault/crypto.js`, `lib/vault/db.js` | keyguard 17-94; crypto 61-63; db 84-91 |
+| I3 — single-chokepoint network | `skills/agency/run.js` (`safeFetch`), `lib/anthropic-client.js` | enforced by `test/privacy-invariants.test.js` Test 3 |
+| Apple Secure Enclave key release path | `lib/vault/keyguard.js` (sep mode) | 17-22, external native binary |
+| SQLCipher v4 profile asserted | `lib/vault/crypto.js` | 50-59 |
+
+**Founder commitment encoded in the doc.** The invariants degrade only
+if the product ships cross-device sync, multi-user vault, team
+accounts, browser-based vault reading, or vendor-side telemetry. Each
+of those would require explicit revision of PRIVACY_INVARIANTS.md +
+PATENT_CLAIMS.md before shipping. Named in advance so it does not
+happen accidentally.
 
 ---
 
