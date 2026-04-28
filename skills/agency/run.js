@@ -211,13 +211,26 @@ try {
   // /agency uses the B2B founder-ops set — Analyst/SDR/Auditor — which
   // refuses out-of-lane via the strict REFUSE: protocol. Pass explicitly so
   // a future change to the default agent set doesn't silently swap voices.
-  const byName = await runAllAgents(client, taskRaw, fetchedContext, {
+  //
+  // runAllAgents returns { byName, errors } per the partial-result contract
+  // (see lib/agents/index.js). Destructuring matters: a flat assignment
+  // would silently land empty strings in the vault on every run.
+  const { byName, errors } = await runAllAgents(client, taskRaw, fetchedContext, {
     agents: AGENCY_AGENTS,
   });
 
-  const analystText = byName["Analyst"] || "";
-  const sdrText = byName["SDR"] || "";
-  const auditorText = byName["Auditor"] || "";
+  if (errors.length > 0) {
+    console.error(
+      `[/agency] ${errors.length}/${AGENCY_AGENTS.length} agents failed; storing partial deliberation`,
+    );
+    for (const e of errors) {
+      console.error(`  - ${e.agent_name}: ${e.reason}`);
+    }
+  }
+
+  const analystText = byName["Analyst"]?.interpretation || "";
+  const sdrText = byName["SDR"]?.interpretation || "";
+  const auditorText = byName["Auditor"]?.interpretation || "";
 
   // Store outputs in the existing columns (kept for backward-compat with PR #4 schema).
   // The legacy column names map: architect_view = analyst, witness_view = sdr, contrarian_view = auditor.
@@ -238,6 +251,7 @@ try {
         analyst: { interpretation: analystText, refused: detectRefusal(analystText) },
         sdr: { interpretation: sdrText, refused: detectRefusal(sdrText) },
         auditor: { interpretation: auditorText, refused: detectRefusal(auditorText) },
+        agent_errors: errors,
       },
       null,
       2,
