@@ -16,33 +16,75 @@ short. Read alongside `ARCHITECTURE.md` (synthesis surface),
 ### Claim 1 — Bounded Agent Refusal Architecture (PPA #4)
 
 A multi-agent system in which each agent has an explicit, declared
-domain and anti-domain; the agent's REFUSAL is a designed first-class
-output, not a fallback or error; refusals route to a named peer agent
-drawn from a structurally-bounded allowlist composed at module-load
-time; the model cannot invent agent names because the allowlist is
-pinned in the prompt.
+domain and anti-domain mapped to an archetypal `(hour, face)`
+coordinate on a 12-position polarity geometry; the agent's REFUSAL is
+a designed first-class output, not a fallback or error; refusals route
+to a named peer agent drawn from a *geometry-derived* allowlist
+constructed at module-load time from the agent's geometric and
+attitudinal opposites; vector-isolated agents (no structurally
+adjacent peer in the active set) fall back to the full peer set with
+explicit notation; the model cannot invent agent names because the
+allowlist is pinned in the prompt and runtime classification flags
+out-of-vector targets as `geometry_violation`.
 
 **Why novel.** The dominant pattern in production agent systems is
 "omniscient agent" — one model attempts every task, hallucinating when
 out of depth. Liminal's agents *refuse* when out of domain and *name*
 the correct agent. Refusal increases trust because it surfaces system
-boundaries the user can verify.
+boundaries the user can verify. The structural defensibility comes
+from the geometry: the bound is not "every other agent" but the small
+set of agents whose archetypal position is structurally adjacent — the
+domain-cross redirect (180° around the clock, same face) and the
+attitude-cross redirect (same hour, opposite face).
 
-**Where enforced in code.**
+**Where enforced in code (introspective surface, c-hard-iii landed).**
 
 | Element | File | Lines |
 |---|---|---|
-| Bounded prompt composer (single chokepoint) | `lib/agents/bounded-system-prompt.js` | full file |
-| Allowlist construction at module-load | `lib/agents/index.js` | 65-67 |
-| Per-agent baseSystem + domain + anti-domain | `lib/agents/{architect,witness,contrarian,strategist,economist,physician,child,historian,cartographer,elder,mystic,betrayer}.js` | each file |
-| Refusal classifier (runtime structural check) | `lib/agents/validation.js` | 29-62 |
-| Structural refusal detector (prefix-check) | `skills/agency/run.js` | 274-280 |
-| Two-axis archetypal geometry (phase 1) | `lib/agents/archetype-base.js` (phase1 branch) | full file |
+| Two-axis archetypal geometry helpers | `lib/agents/archetype-base.js` | full file |
+| Bound construction (Option A — geometry-bound + vector-isolated fallback) | `lib/agents/bounded-system-prompt.js` | 64-118 |
+| Allowlist composition at module-load | `lib/agents/index.js` | 65-67 |
+| Per-agent (hour, face) typing | `lib/agents/{architect,witness,contrarian,strategist,economist,physician,child,historian,cartographer,elder,mystic,betrayer}.js` | each file (lines 4-5) |
+| Refusal classifier with geometry check | `lib/agents/validation.js` | 41-104 |
+| Structural refusal detector (prefix-check) | `skills/agency/run.js` | 297-303 |
+| `describeBound` diagnostic (used by tests) | `lib/agents/bounded-system-prompt.js` | 122-141 |
+| Geometry-binding tests (Layer 3) | `test/geometry-binding.test.js` | full file |
+| Coverage planning artifact | `CHARD3_PLAN.md` | full file |
 
 **Frozen taxonomies that bound the claim.**
 - 12 introspective agents in 4 registers — `lib/agents/index.js:54-59`
-- REFUSAL PROTOCOL exact format — `lib/agents/bounded-system-prompt.js:96-101`
-- 5 classification kinds — `lib/agents/validation.js:23-28`
+- REFUSAL PROTOCOL exact format — `lib/agents/bounded-system-prompt.js:115-122`
+- 6 classification kinds (incl. `geometry_violation`) — `lib/agents/validation.js:32-49`
+- 12 archetypal hours (HOURS) — `lib/agents/archetype-base.js:55-69`
+- 2 faces (FACES) — `lib/agents/archetype-base.js:71`
+
+**Coverage at landing.**
+
+| Agent | (Hour, Face) | Bound kind |
+|---|---|---|
+| Architect | (10, inner) | vector-isolated |
+| Strategist | (5, inner) | geometry-bound: Elder, Historian |
+| Economist | (5, inner) | geometry-bound: Elder, Historian |
+| Witness | (12, inner) | vector-isolated |
+| Physician | (8, inner) | geometry-bound: Cartographer |
+| Child | (1, inner) | geometry-bound: Contrarian, Mystic, Betrayer |
+| Historian | (11, inner) | geometry-bound: Strategist, Economist |
+| Cartographer | (2, inner) | geometry-bound: Physician |
+| Elder | (11, inner) | geometry-bound: Strategist, Economist |
+| Contrarian | (7, inner) | geometry-bound: Child |
+| Mystic | (7, inner) | geometry-bound: Child |
+| Betrayer | (7, inner) | geometry-bound: Child |
+
+10 of 12 agents are geometry-bound; 2 (Architect, Witness) are
+vector-isolated and degrade to the full allowlist with explicit
+notation. The vector-isolation is *itself* a structural finding —
+those archetypal positions have no inner-face peer in the introspective
+set, so refusal narrowing would force invented names. The fallback is
+documented and testable.
+
+**Out-of-scope (queue):** the agency surface (`AGENCY_AGENTS` in main,
+`sandbox/lib/agents/`) does not yet go through `buildBoundedSystemPrompt`
+under c-hard-iii. Refactor scheduled per (γ) — next-week milestone.
 
 ---
 

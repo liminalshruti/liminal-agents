@@ -115,12 +115,20 @@ test("PPA #5 — correction taxonomy is frozen at 9 tags; main and sandbox stay 
 
 // ─── Test 2 — PPA #4 bounded prompt always emits allowlist + protocol ────
 
-test("PPA #4 — every introspective agent's bounded prompt contains allowlist + REFUSE protocol", () => {
+test("PPA #4 — every introspective agent's bounded prompt contains a structurally-correct allowlist + REFUSE protocol", async () => {
   // Bounded refusal is structurally enforced if and only if every agent's
   // composed system prompt (a) lists the allowed peer agents by name, and
   // (b) declares the strict REFUSE: <agent>\n<one-sentence> protocol. If
   // either is absent for any agent, refusals can drift to invented names
   // and PPA #4 weakens to convention.
+  //
+  // Under c-hard-iii (CHARD3_PLAN.md, Option A), the bound is geometry-
+  // derived: for vector-bound agents, only the geometric/attitudinal
+  // vector occupants appear in the allowlist; for vector-isolated agents
+  // (Architect, Witness — see CHARD3 audit table), the full allowlist
+  // applies. The dual-form check below admits both shapes.
+
+  const { describeBound } = await import("../lib/agents/bounded-system-prompt.js");
 
   for (const agent of INTROSPECTIVE_AGENTS) {
     const prompt = agent.system;
@@ -141,13 +149,60 @@ test("PPA #4 — every introspective agent's bounded prompt contains allowlist +
       `agent ${agent.name} prompt missing canonical refusal format`,
     );
 
-    // (a) allowlist — every other introspective agent's name must appear.
-    for (const peer of INTROSPECTIVE_AGENTS) {
-      if (peer.name === agent.name) continue;
-      assert.ok(
-        prompt.includes(peer.name),
-        `agent ${agent.name} prompt missing peer ${peer.name} from allowlist`,
+    // (a) allowlist — depends on the agent's bound kind.
+    const bound = describeBound(agent, INTROSPECTIVE_AGENTS);
+    assert.ok(
+      bound.bound.length > 0,
+      `agent ${agent.name} has empty bound — should be impossible`,
+    );
+
+    if (bound.kind === "geometry-bound") {
+      // Every vector occupant must appear; non-occupants must NOT appear
+      // in the structural allowlist phrase. We verify the "refuse to one
+      // of these agent names only:" line specifically.
+      const allowlistMatch = prompt.match(
+        /refuse to one of these agent names only:\s*([^.]+)\./,
       );
+      assert.ok(
+        allowlistMatch,
+        `agent ${agent.name}: could not locate allowlist phrase`,
+      );
+      const allowlistText = allowlistMatch[1];
+      for (const occupantName of bound.bound) {
+        assert.ok(
+          allowlistText.includes(occupantName),
+          `agent ${agent.name} (geometry-bound) allowlist missing vector occupant ${occupantName}`,
+        );
+      }
+      // GEOMETRY explainer line must be present and reference verbs.
+      assert.match(
+        prompt,
+        /GEOMETRY:/,
+        `agent ${agent.name} (geometry-bound) missing GEOMETRY explainer`,
+      );
+    } else if (bound.kind === "vector-isolated") {
+      // Vector-isolated: full allowlist + the isolation notice.
+      for (const peer of INTROSPECTIVE_AGENTS) {
+        if (peer.name === agent.name) continue;
+        assert.ok(
+          prompt.includes(peer.name),
+          `agent ${agent.name} (vector-isolated) prompt missing peer ${peer.name}`,
+        );
+      }
+      assert.match(
+        prompt,
+        /vector-isolated/,
+        `agent ${agent.name} (vector-isolated) missing isolation notice`,
+      );
+    } else {
+      // Untyped — classical full allowlist.
+      for (const peer of INTROSPECTIVE_AGENTS) {
+        if (peer.name === agent.name) continue;
+        assert.ok(
+          prompt.includes(peer.name),
+          `agent ${agent.name} (untyped) prompt missing peer ${peer.name}`,
+        );
+      }
     }
   }
 
