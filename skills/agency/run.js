@@ -232,11 +232,34 @@ try {
   const sdrText = byName["SDR"]?.interpretation || "";
   const auditorText = byName["Auditor"]?.interpretation || "";
 
-  // Store outputs in the existing columns (kept for backward-compat with PR #4 schema).
-  // The legacy column names map: architect_view = analyst, witness_view = sdr, contrarian_view = auditor.
+  // Dual-write: legacy columns for PR #4-era back-compat, agent_views for
+  // the normalized model. The legacy column-name mapping (architect_view =
+  // analyst, etc.) is semantic-debt — column names lie about what they
+  // hold. agent_views uses the correct agent name as the row key, so any
+  // downstream tooling joining on agent_name reads /agency reads alongside
+  // /check reads with consistent semantics.
   db.prepare(
     `UPDATE deliberations SET architect_view = ?, witness_view = ?, contrarian_view = ? WHERE id = ?`,
   ).run(analystText, sdrText, auditorText, deliberationId);
+
+  const insertView = db.prepare(
+    `INSERT OR REPLACE INTO agent_views (deliberation_id, agent_name, register, interpretation, schema_version)
+     VALUES (?, ?, ?, ?, 1)`,
+  );
+  const tx = db.transaction(() => {
+    for (const agent of AGENCY_AGENTS) {
+      const r = byName[agent.name];
+      if (r && !r.error && r.interpretation) {
+        insertView.run(
+          deliberationId,
+          agent.name,
+          agent.register || "Operational",
+          r.interpretation,
+        );
+      }
+    }
+  });
+  tx();
 
   console.log(
     JSON.stringify(
